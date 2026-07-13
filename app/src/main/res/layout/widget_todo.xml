@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="12dp"
+    android:background="#FFF5F5F5">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+
+        <TextView
+            android:id="@+id/widget_title"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="QuickTodo"
+            android:textSize="16sp"
+            android:textColor="#FF1C1C1E"
+            android:textStyle="bold" />
+
+        <ImageButton
+            android:id="@+id/widget_voice_btn"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:src="@drawable/ic_mic_white"
+            android:background="@drawable/widget_voice_bg"
+            android:contentDescription="Voice input" />
+
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/widget_todo_text"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:textSize="13sp"
+        android:textColor="#FF3C3C43"
+        android:lineSpacingExtra="3dp"
+        android:paddingVertical="6dp"
+        android:maxLines="12" />
+
+</LinearLayout>
