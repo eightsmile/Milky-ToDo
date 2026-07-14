@@ -70,28 +70,13 @@ class TodoViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun updateTitle(id: Long, newTitle: String) {
-        viewModelScope.launch {
-            repository.updateTitle(id, newTitle)
-            refreshWidget()
-        }
-    }
-
-    fun updateDueDate(id: Long, dueDate: Long?) {
+    fun updateTodo(id: Long, title: String, dueDate: Long?, repeat: String) {
         viewModelScope.launch {
             val todo = com.quicktodo.data.AppDatabase.getInstance(appContext).todoDao().getTodoById(id)
             if (todo != null) {
-                com.quicktodo.data.AppDatabase.getInstance(appContext).todoDao().update(todo.copy(dueDate = dueDate))
-            }
-            refreshWidget()
-        }
-    }
-
-    fun updateRepeatInterval(id: Long, repeat: String) {
-        viewModelScope.launch {
-            val todo = com.quicktodo.data.AppDatabase.getInstance(appContext).todoDao().getTodoById(id)
-            if (todo != null) {
-                com.quicktodo.data.AppDatabase.getInstance(appContext).todoDao().update(todo.copy(repeatInterval = repeat))
+                com.quicktodo.data.AppDatabase.getInstance(appContext).todoDao().update(
+                    todo.copy(title = title.trim(), dueDate = dueDate, repeatInterval = repeat)
+                )
             }
             refreshWidget()
         }

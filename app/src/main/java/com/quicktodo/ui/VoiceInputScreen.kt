@@ -259,13 +259,17 @@ fun VoiceInputScreen(
                                         val duration = System.currentTimeMillis() - startTime
 
                                         if (duration < 1000) {
-                                            rec.stop(); rec.release()
+                                            try { rec.stop() } catch (_: Exception) { }
+                                            try { rec.release() } catch (_: Exception) { }
                                             isRecording = false
-                                            errorMessage = "Hold longer to record"
+                                            mediaRecorder = null
+                                            errorMessage = "No Voice Recording"
                                             return@detectTapGestures
                                         }
 
-                                        rec.stop(); rec.release()
+                                        try { rec.stop() } catch (_: Exception) { }
+                                        rec.release()
+                                        mediaRecorder = null
                                         isRecording = false
                                         isProcessing = true
 

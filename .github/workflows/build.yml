@@ -46,12 +46,12 @@ jobs:
           path: .
 
       - name: Rename APK
-        run: mv app-debug.apk milkyToDo-${{ github.ref_name }}.apk
+        run: mv app-debug.apk MilkyToDo.apk
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          files: milkyToDo-${{ github.ref_name }}.apk
+          files: MilkyToDo.apk
           generate_release_notes: true
           make_latest: true
           name: Milky ToDo ${{ github.ref_name }}

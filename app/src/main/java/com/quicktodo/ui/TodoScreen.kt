@@ -44,13 +44,11 @@ fun TodoScreen(
     onAddTodo: (String, Long?, String) -> Unit,
     onToggle: (Long, Boolean) -> Unit,
     onDelete: (TodoEntity) -> Unit,
-    onUpdateTitle: (Long, String) -> Unit,
+    onUpdateTodo: (Long, String, Long?, String) -> Unit,
     onArchiveCompleted: () -> Unit,
     onOpenVoice: () -> Unit,
     onOpenSettings: () -> Unit,
-    onOpenArchive: () -> Unit,
-    onUpdateDueDate: (Long, Long?) -> Unit = { _, _ -> },
-    onUpdateRepeat: (Long, String) -> Unit = { _, _ -> }
+    onOpenArchive: () -> Unit
 ) {
     var newTodoText by remember { mutableStateOf("") }
     var editingTodoId by remember { mutableStateOf<Long?>(null) }
@@ -152,15 +150,13 @@ fun TodoScreen(
                                     editingText = todo.title
                                 },
                                 onEditTextChange = { editingText = it },
-                                onSaveEdit = {
-                                    if (editingText.isNotBlank()) {
-                                        onUpdateTitle(todo.id, editingText)
+                                onSaveEdit = { title, dueDate, repeat ->
+                                    if (title.isNotBlank()) {
+                                        onUpdateTodo(todo.id, title, dueDate, repeat)
                                     }
                                     editingTodoId = null
                                 },
-                                onCancelEdit = { editingTodoId = null },
-                                onUpdateDueDate = { d -> onUpdateDueDate(todo.id, d) },
-                                onUpdateRepeat = { r -> onUpdateRepeat(todo.id, r) }
+                                onCancelEdit = { editingTodoId = null }
                             )
                         },
                         enableDismissFromStartToEnd = false,
@@ -391,10 +387,8 @@ fun TodoItem(
     onToggle: () -> Unit,
     onEdit: () -> Unit,
     onEditTextChange: (String) -> Unit = {},
-    onSaveEdit: () -> Unit = {},
-    onCancelEdit: () -> Unit = {},
-    onUpdateDueDate: (Long?) -> Unit = {},
-    onUpdateRepeat: (String) -> Unit = {}
+    onSaveEdit: (title: String, dueDate: Long?, repeat: String) -> Unit = { _, _, _ -> },
+    onCancelEdit: () -> Unit = {}
 ) {
     val dateFormat = remember { SimpleDateFormat("MMM dd", Locale.getDefault()) }
     val isOverdue = todo.dueDate != null && todo.dueDate!! < System.currentTimeMillis() && !todo.isDone
@@ -505,9 +499,7 @@ fun TodoItem(
                         )
                         Spacer(modifier = Modifier.weight(1f))
                         TextButton(onClick = {
-                            onUpdateDueDate(editDueDate)
-                            onUpdateRepeat(editRepeat)
-                            onSaveEdit()
+                            onSaveEdit(editText, editDueDate, editRepeat)
                         }, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)) {
                             Text("Done", fontSize = 12.sp)
                         }

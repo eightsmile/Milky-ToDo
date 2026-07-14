@@ -47,13 +47,11 @@ class MainActivity : ComponentActivity() {
                         },
                         onToggle = { id, done -> viewModel.toggleTodo(id, done) },
                         onDelete = { viewModel.deleteTodo(it) },
-                        onUpdateTitle = { id, title -> viewModel.updateTitle(id, title) },
+                        onUpdateTodo = { id, title, dueDate, repeat -> viewModel.updateTodo(id, title, dueDate, repeat) },
                         onArchiveCompleted = { viewModel.archiveCompleted() },
                         onOpenVoice = { currentScreen = Screen.VOICE_INPUT },
                         onOpenSettings = { currentScreen = Screen.SETTINGS },
                         onOpenArchive = { currentScreen = Screen.ARCHIVE },
-                        onUpdateDueDate = { id, d -> viewModel.updateDueDate(id, d) },
-                        onUpdateRepeat = { id, r -> viewModel.updateRepeatInterval(id, r) }
                     )
 
                     Screen.VOICE_INPUT -> VoiceInputScreen(
