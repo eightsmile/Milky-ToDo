@@ -17,31 +17,35 @@ class SettingsDataStore(private val context: Context) {
         val STT_ENDPOINT = stringPreferencesKey("stt_endpoint")
         val STT_API_KEY = stringPreferencesKey("stt_api_key")
         val STT_MODEL = stringPreferencesKey("stt_model")
+        val STT_RESOURCE_ID = stringPreferencesKey("stt_resource_id")
         val LLM_ENDPOINT = stringPreferencesKey("llm_endpoint")
         val LLM_API_KEY = stringPreferencesKey("llm_api_key")
         val LLM_MODEL = stringPreferencesKey("llm_model")
     }
 
     val sttEndpoint: Flow<String> = context.settingsStore.data.map { it[STT_ENDPOINT] ?: "" }
-    val sttApiKey: Flow<String> = context.settingsStore.data.map { it[STT_API_KEY] ?: "" }
+    val sttApiKey: *** = context.settingsStore.data.map { it[STT_API_KEY] ?: "" }
     val sttModel: Flow<String> = context.settingsStore.data.map { it[STT_MODEL] ?: "whisper-1" }
+    val sttResourceId: Flow<String> = context.settingsStore.data.map { it[STT_RESOURCE_ID] ?: "" }
     val llmEndpoint: Flow<String> = context.settingsStore.data.map { it[LLM_ENDPOINT] ?: "" }
-    val llmApiKey: Flow<String> = context.settingsStore.data.map { it[LLM_API_KEY] ?: "" }
+    val llmApiKey: *** = context.settingsStore.data.map { it[LLM_API_KEY] ?: "" }
     val llmModel: Flow<String> = context.settingsStore.data.map { it[LLM_MODEL] ?: "deepseek-chat" }
 
     // Synchronous getters (for widgets etc.)
     fun getSttEndpointSync(): String = runBlocking { sttEndpoint.first() }
     fun getSttApiKeySync(): String = runBlocking { sttApiKey.first() }
     fun getSttModelSync(): String = runBlocking { sttModel.first() }
+    fun getSttResourceIdSync(): String = runBlocking { sttResourceId.first() }
     fun getLlmEndpointSync(): String = runBlocking { llmEndpoint.first() }
     fun getLlmApiKeySync(): String = runBlocking { llmApiKey.first() }
     fun getLlmModelSync(): String = runBlocking { llmModel.first() }
 
-    suspend fun saveSttSettings(endpoint: String, apiKey: String, model: String) {
+    suspend fun saveSttSettings(endpoint: String, apiKey: *** model: String, resourceId: String) {
         context.settingsStore.edit { prefs ->
             prefs[STT_ENDPOINT] = endpoint
             prefs[STT_API_KEY] = apiKey
             prefs[STT_MODEL] = model
+            prefs[STT_RESOURCE_ID] = resourceId
         }
     }
 

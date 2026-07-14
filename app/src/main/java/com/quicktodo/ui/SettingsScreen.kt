@@ -27,6 +27,7 @@ fun SettingsScreen(
     var sttEndpoint by remember { mutableStateOf("") }
     var sttApiKey by remember { mutableStateOf("") }
     var sttModel by remember { mutableStateOf("") }
+    var sttResourceId by remember { mutableStateOf("") }
     var llmEndpoint by remember { mutableStateOf("") }
     var llmApiKey by remember { mutableStateOf("") }
     var llmModel by remember { mutableStateOf("") }
@@ -37,6 +38,7 @@ fun SettingsScreen(
         sttEndpoint = settings.sttEndpoint.first()
         sttApiKey = settings.sttApiKey.first()
         sttModel = settings.sttModel.first()
+        sttResourceId = settings.sttResourceId.first()
         llmEndpoint = settings.llmEndpoint.first()
         llmApiKey = settings.llmApiKey.first()
         llmModel = settings.llmModel.first()
@@ -110,6 +112,17 @@ fun SettingsScreen(
             )
             Spacer(modifier = Modifier.height(4.dp))
 
+            OutlinedTextField(
+                value = sttResourceId,
+                onValueChange = { sttResourceId = it },
+                label = { Text("Resource ID") },
+                placeholder = { Text("volc.bigasr.auc_turbo") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                shape = RoundedCornerShape(12.dp)
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+
             // STT preset quick-fill
             Text("Presets:", fontSize = 12.sp, color = TextSecondary)
             Row(
@@ -120,6 +133,7 @@ fun SettingsScreen(
                     onClick = {
                         sttEndpoint = "https://openspeech.bytedance.com/api/v3/auc/bigmodel/recognize/flash"
                         sttModel = "bigmodel"
+                        sttResourceId = "volc.bigasr.auc_turbo"
                     },
                     label = { Text("Doubao ASR", fontSize = 11.sp) },
                     shape = RoundedCornerShape(8.dp)
@@ -308,7 +322,7 @@ fun SettingsScreen(
             Button(
                 onClick = {
                     scope.launch {
-                        settings.saveSttSettings(sttEndpoint, sttApiKey, sttModel)
+                        settings.saveSttSettings(sttEndpoint, sttApiKey, sttModel, sttResourceId)
                         settings.saveLlmSettings(llmEndpoint, llmApiKey, llmModel)
                         saveMessage = "Saved!"
                     }

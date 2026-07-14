@@ -37,6 +37,7 @@ class ApiService(private val settings: SettingsDataStore) {
         try {
             val ak = settings.sttApiKey.first()
             if (ak.isBlank()) return SttResult(false, error = "STT API key not configured")
+            val rid = settings.sttResourceId.first().ifBlank { "volc.bigasr.auc_turbo" }
             val uid = ak.take(15)
             val audioBytes = withContext(Dispatchers.IO) { audioFile.readBytes() }
             val b64 = Base64.encodeToString(audioBytes, Base64.NO_WRAP)
@@ -44,13 +45,15 @@ class ApiService(private val settings: SettingsDataStore) {
             val body = JSONObject().apply {
                 put("user", JSONObject().apply { put("uid", uid) })
                 put("audio", JSONObject().apply { put("data", b64) })
-                put("request", JSONObject().apply { put("model_name", "bigmodel") })
+                put("request", JSONObject().apply {
+                    put("model_name", settings.sttModel.first().ifBlank { "bigmodel" })
+                })
             }
 
             val req = Request.Builder()
                 .url("https://openspeech.bytedance.com/api/v3/auc/bigmodel/recognize/flash")
                 .header("X-Api-Key", ak)
-                .header("X-Api-Resource-Id", "volc.bigasr.auc_turbo")
+                .header("X-Api-Resource-Id", rid)
                 .header("X-Api-Request-Id", UUID.randomUUID().toString())
                 .header("X-Api-Sequence", "-1")
                 .header("Content-Type", "application/json")
