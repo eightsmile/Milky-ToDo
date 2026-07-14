@@ -455,7 +455,8 @@ fun TodoItem(
                     OutlinedTextField(
                         value = editText,
                         onValueChange = onEditTextChange,
-                        singleLine = true,
+                        singleLine = false,
+                        minLines = 1, maxLines = 8,
                         modifier = Modifier.fillMaxWidth(),
                         colors = TextFieldDefaults.colors(
                             focusedContainerColor = Color.Transparent,
@@ -537,9 +538,7 @@ fun TodoItem(
                     text = todo.title,
                     fontSize = 16.sp,
                     textDecoration = if (todo.isDone) TextDecoration.LineThrough else TextDecoration.None,
-                    color = if (todo.isDone) TextSecondary else MaterialTheme.colorScheme.onSurface,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
+                    color = if (todo.isDone) TextSecondary else MaterialTheme.colorScheme.onSurface
                 )
                 if (todo.dueDate != null || todo.repeatInterval != "NONE") {
                     Row(

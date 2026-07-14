@@ -97,7 +97,15 @@ fun VoiceInputScreen(
                         )
 
                         Spacer(Modifier.height(8.dp))
-                        Text("Original: $recognizedText", fontSize = 12.sp, color = TextSecondary)
+                        OutlinedTextField(
+                            value = recognizedText,
+                            onValueChange = { recognizedText = it },
+                            label = { Text("Original") },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp),
+                            minLines = 2, maxLines = 4,
+                            textStyle = LocalTextStyle.current.copy(fontSize = 14.sp, color = TextSecondary)
+                        )
 
                         // Date & Repeat chips
                         Spacer(Modifier.height(12.dp))

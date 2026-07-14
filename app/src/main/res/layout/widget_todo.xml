@@ -25,11 +25,12 @@
 
         <ImageButton
             android:id="@+id/widget_voice_btn"
-            android:layout_width="40dp"
-            android:layout_height="40dp"
+            android:layout_width="56dp"
+            android:layout_height="56dp"
             android:src="@drawable/ic_mic_white"
             android:background="@drawable/widget_voice_bg"
-            android:contentDescription="Voice input" />
+            android:contentDescription="Voice input"
+            android:padding="8dp" />
 
     </LinearLayout>
 

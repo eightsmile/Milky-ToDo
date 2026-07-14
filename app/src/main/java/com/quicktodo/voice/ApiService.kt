@@ -133,8 +133,31 @@ class ApiService(private val settings: SettingsDataStore) {
                 return LlmResult(true, text = title, dueDate = dueDate, repeatInterval = repeatStr)
             }
 
-            // Plain text fallback: take first line as title
-            val firstLine = content.lines().first { it.isNotBlank() }
+            // Sometimes LLM returns a JSON array instead of object (e.g. "[", "[{...}]")
+            val array = try { JSONArray(content) } catch (_: Exception) { null }
+            if (array != null && array.length() > 0) {
+                val first = array.optJSONObject(0)
+                if (first != null) {
+                    val title = first.optString("title", "").trim()
+                    if (title.isNotBlank()) {
+                        val dateStr = first.optString("date", "none")
+                        val repeatStr = first.optString("repeat", "NONE").let { r ->
+                            when {
+                                r.equals("DAILY", true) -> "DAILY"
+                                r.equals("WEEKLY", true) -> "WEEKLY"
+                                r.equals("MONTHLY", true) -> "MONTHLY"
+                                else -> "NONE"
+                            }
+                        }
+                        val dueDate = parseDateString(dateStr)
+                        return LlmResult(true, text = title, dueDate = dueDate, repeatInterval = repeatStr)
+                    }
+                }
+            }
+
+            // Plain text fallback: take first meaningful line, skip garbage
+            val clean = content.trim().replace(Regex("^[\\[\\]{}()\"'\\s,]+|[\\[\\]{}()\"'\\s,]+$\""), "").trim()
+            val firstLine = clean.lines().firstOrNull { it.isNotBlank() && it.length > 1 } ?: content
             return LlmResult(true, text = firstLine)
         } catch (e: Exception) {
             return LlmResult(false, error = "LLM failed: ${e.localizedMessage ?: "Unknown"}")
