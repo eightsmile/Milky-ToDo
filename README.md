@@ -1,8 +1,8 @@
 # Milky ToDo
 
-[![Download](https://img.shields.io/github/v/release/eightsmile/Milky-ToDo?label=Download%20APK&color=FF69B4)](https://github.com/eightsmile/Milky-ToDo/releases/latest)
+[![Download APK](https://img.shields.io/badge/Download-APK_v1.0-FF69B4?logo=android)](https://github.com/eightsmile/Milky-ToDo/releases/latest)
 [![Build](https://github.com/eightsmile/Milky-ToDo/actions/workflows/build.yml/badge.svg)](https://github.com/eightsmile/Milky-ToDo/actions/workflows/build.yml)
-[![License](https://img.shields.io/github/license/eightsmile/Milky-ToDo?color=blue)](LICENSE)
+[![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
 A lightweight, cute Android to-do app with voice input, AI-powered task refinement, and Obsidian sync.
 
