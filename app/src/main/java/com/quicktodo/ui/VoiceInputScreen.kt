@@ -304,6 +304,9 @@ fun VoiceInputScreen(
 
                                         isRecording = false
                                         isProcessing = true
+                                        try { rec.stop() } catch (_: Exception) { }
+                                        rec.release()
+                                        mediaRecorder = null
 
                                         scope.launch {
                                             val api = ApiService(QuickTodoApp.instance.settingsDataStore)
