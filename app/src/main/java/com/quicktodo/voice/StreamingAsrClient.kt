@@ -133,7 +133,10 @@ class StreamingAsrClient(
                                     val result = json.optJSONObject("result")
                                     if (result != null) {
                                         val text = result.optString("text", "")
-                                        if (text.isNotEmpty()) resultBuilder.append(text)
+                                        if (text.isNotEmpty()) {
+                                            resultBuilder.setLength(0)  // replace, don't append
+                                            resultBuilder.append(text)
+                                        }
                                     }
                                 } catch (_: Exception) { }
                             }
