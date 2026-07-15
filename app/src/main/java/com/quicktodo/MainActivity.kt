@@ -11,6 +11,7 @@ import com.quicktodo.ui.SettingsScreen
 import com.quicktodo.ui.TodoScreen
 import com.quicktodo.ui.TodoViewModel
 import com.quicktodo.ui.VoiceInputScreen
+import com.quicktodo.ui.EditableTodoItem
 import androidx.lifecycle.viewmodel.compose.viewModel
 
 enum class Screen {
@@ -56,8 +57,10 @@ class MainActivity : ComponentActivity() {
 
                     Screen.VOICE_INPUT -> VoiceInputScreen(
                         onBack = { currentScreen = Screen.TODO_LIST },
-                        onConfirm = { text, dueDate, repeat ->
-                            viewModel.addTodo(text, dueDate, repeat)
+                        onConfirm = { items ->
+                            for (item in items) {
+                                viewModel.addTodo(item.title, item.dueDate, item.repeatInterval)
+                            }
                             currentScreen = Screen.TODO_LIST
                         },
                         settingsProvider = { settings }

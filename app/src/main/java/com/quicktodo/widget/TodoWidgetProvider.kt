@@ -45,12 +45,11 @@ class TodoWidgetProvider : AppWidgetProvider() {
                     sb.append("No todos")
                 } else {
                     for (t in pending) {
-                        val repeatTag = if (t.repeatInterval != "NONE") " 🔁" else ""
                         val dateTag = t.dueDate?.let {
                             val fmt = java.text.SimpleDateFormat("MM/dd", java.util.Locale.getDefault())
                             " 📅${fmt.format(java.util.Date(it))}"
                         } ?: ""
-                        sb.append("• ").append(t.title).append(repeatTag).append(dateTag).append('\n')
+                        sb.append("• ").append(t.title).append(dateTag).append('\n')
                     }
                 }
 

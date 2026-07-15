@@ -18,11 +18,18 @@ import java.util.concurrent.TimeUnit
 
 data class SttResult(val success: Boolean, val text: String = "", val error: String = "")
 
+data class LlmTodoItem(
+    val title: String,
+    val dueDate: Long? = null,
+    val repeatInterval: String = "NONE"
+)
+
 data class LlmResult(
     val success: Boolean,
     val text: String = "",
     val dueDate: Long? = null,
     val repeatInterval: String = "NONE",
+    val items: List<LlmTodoItem>? = null,
     val error: String = ""
 )
 
@@ -83,20 +90,22 @@ class ApiService(private val settings: SettingsDataStore) {
             }
             val md = settings.llmModel.first().ifBlank { "deepseek-chat" }
 
-            val sysPrompt = "请将用户的语音转写内容整理为待办事项，以JSON格式返回。\n\n" +
-                "要求：\n" +
-                "1. 一项任务对应一条待办，输出格式：{\"title\": \"...\", \"date\": \"...或none\", \"repeat\": \"DAILY/WEEKLY/MONTHLY/NONE\"}\n" +
-                "2. title：对内容进行改写，但尽量保留用户原始表达的含义和内容长度。只删除语气词（如\"嗯\"、\"啊\"、\"那个\"）、无效重复、以及明显说错的内容。不要过度精简或改写，保留完整意图。\n" +
-                "3. date：提取日期、时间、截止时间，如\"3月15日\"、\"下周一\"；未提及则为\"none\"\n" +
-                "4. repeat：提取重复周期，\"DAILY\"/\"WEEKLY\"/\"MONTHLY\"/\"NONE\"\n" +
-                "5. 信息不明确时，不要擅自推测\n" +
-                "6. 仅输出JSON，不添加解释\n\n" +
-                "示例：\n" +
-                "\"明天去买牛奶\" -> {\"title\":\"明天去买牛奶\",\"date\":\"明天\",\"repeat\":\"NONE\"}\n" +
-                "\"每周一开周会\" -> {\"title\":\"每周一开周会\",\"date\":\"下周一\",\"repeat\":\"WEEKLY\"}\n" +
-                "\"每天吃药\" -> {\"title\":\"每天吃药\",\"date\":\"none\",\"repeat\":\"DAILY\"}\n" +
-                "\"每个月1号交话费\" -> {\"title\":\"每个月1号交话费\",\"date\":\"下个月1号\",\"repeat\":\"MONTHLY\"}\n\n" +
-                "语音内容：\n" + rawText
+            val sysPrompt = "请将用户的语音转写内容整理为待办事项，以JSON数组格式返回。\\n\\n\" +
+                "要求：\\n\" +
+                "1. 每项任务对应一个JSON对象，格式：{\\\"title\\\": \\\"...\\\", \\\"date\\\": \\\"...或none\\\", \\\"time\\\": \\\"...或none\\\", \\\"repeat\\\": \\\"DAILY/WEEKLY/MONTHLY/NONE\\\"}\\n\" +
+                "2. 返回JSON数组[...]，多个任务用多个对象\\n\" +
+                "3. 如果只有一个任务，也返回数组[{...}]\\n\" +
+                "4. title：对内容进行改写，但尽量保留用户原始表达的含义和内容长度。只删除语气词（如\\\"嗯\\\"、\\\"啊\\\"、\\\"那个\\\"）、无效重复、以及明显说错的内容。不要过度精简或改写，保留完整意图。\\n\" +
+                "5. date：提取日期，如\\\"3月15日\\\"、\\\"下周一\\\"；未提及则为\\\"none\\\"\\n\" +
+                "6. time：提取具体时间（24小时制），如\\\"下午3点\\\"→\\\"15:00\\\"、\\\"晚上8点半\\\"→\\\"20:30\\\"；未提及则为\\\"none\\\"\\n\" +
+                "7. repeat：提取重复周期，\\\"DAILY\\\"/\\\"WEEKLY\\\"/\\\"MONTHLY\\\"/\\\"NONE\\\"\\n\" +
+                "8. 信息不明确时，不要擅自推测\\n\" +
+                "9. 仅输出JSON数组，不添加解释\\n\\n\" +
+                "示例：\\n\" +
+                "\\\"明天下午3点去买牛奶\\\" -> [{\\\"title\\\":\\\"买牛奶\\\",\\\"date\\\":\\\"明天\\\",\\\"time\\\":\\\"15:00\\\",\\\"repeat\\\":\\\"NONE\\\"}]\\n\" +
+                "\\\"每周一上午10点开周会，每天吃药\\\" -> [{\\\"title\\\":\\\"每周一开周会\\\",\\\"date\\\":\\\"下周一\\\",\\\"time\\\":\\\"10:00\\\",\\\"repeat\\\":\\\"WEEKLY\\\"},{\\\"title\\\":\\\"每天吃药\\\",\\\"date\\\":\\\"none\\\",\\\"time\\\":\\\"none\\\",\\\"repeat\\\":\\\"DAILY\\\"}]\\n\" +
+                "\\\"每个月1号交话费\\\" -> [{\\\"title\\\":\\\"交话费\\\",\\\"date\\\":\\\"下个月1号\\\",\\\"time\\\":\\\"none\\\",\\\"repeat\\\":\\\"MONTHLY\\\"}]\\n\\n\" +
+                "语音内容：\\n\" + rawText
 
             val msgs = org.json.JSONArray().apply {
                 put(JSONObject().apply { put("role", "user"); put("content", sysPrompt) })
@@ -120,12 +129,11 @@ class ApiService(private val settings: SettingsDataStore) {
 
             if (content.isBlank()) return LlmResult(false, error = "LLM empty")
 
-            // Try JSON first, fallback to plain text
-            val json = try { JSONObject(content) } catch (_: Exception) { null }
-            if (json != null) {
-                val title = json.optString("title", content).trim()
-                val dateStr = json.optString("date", "none")
-                val repeatStr = json.optString("repeat", "NONE").let { r ->
+            fun parseItem(obj: JSONObject): LlmTodoItem {
+                val title = obj.optString("title", "").trim()
+                val dateStr = obj.optString("date", "none")
+                val timeStr = obj.optString("time", "none")
+                val repeatStr = obj.optString("repeat", "NONE").let { r ->
                     when {
                         r.equals("DAILY", true) -> "DAILY"
                         r.equals("WEEKLY", true) -> "WEEKLY"
@@ -133,29 +141,54 @@ class ApiService(private val settings: SettingsDataStore) {
                         else -> "NONE"
                     }
                 }
-                val dueDate = parseDateString(dateStr)
-                return LlmResult(true, text = title, dueDate = dueDate, repeatInterval = repeatStr)
+                var dueDate = parseDateString(dateStr)
+                // Apply time if provided
+                if (dueDate != null && !timeStr.equals("none", true) && timeStr.isNotBlank()) {
+                    val parts = timeStr.split(":")
+                    if (parts.size == 2) {
+                        try {
+                            val h = parts[0].toInt()
+                            val m = parts[1].toInt()
+                            val cal = Calendar.getInstance().apply { timeInMillis = dueDate!! }
+                            cal.set(Calendar.HOUR_OF_DAY, h)
+                            cal.set(Calendar.MINUTE, m)
+                            cal.set(Calendar.SECOND, 0)
+                            cal.set(Calendar.MILLISECOND, 0)
+                            dueDate = cal.timeInMillis
+                        } catch (_: Exception) { }
+                    }
+                }
+                return LlmTodoItem(title = title.ifBlank { "Untitled" }, dueDate = dueDate, repeatInterval = repeatStr)
             }
 
-            // Sometimes LLM returns a JSON array instead of object (e.g. "[", "[{...}]")
+            // Try JSONArray first (new format)
             val array = try { JSONArray(content) } catch (_: Exception) { null }
             if (array != null && array.length() > 0) {
-                val first = array.optJSONObject(0)
-                if (first != null) {
-                    val title = first.optString("title", "").trim()
-                    if (title.isNotBlank()) {
-                        val dateStr = first.optString("date", "none")
-                        val repeatStr = first.optString("repeat", "NONE").let { r ->
-                            when {
-                                r.equals("DAILY", true) -> "DAILY"
-                                r.equals("WEEKLY", true) -> "WEEKLY"
-                                r.equals("MONTHLY", true) -> "MONTHLY"
-                                else -> "NONE"
-                            }
-                        }
-                        val dueDate = parseDateString(dateStr)
-                        return LlmResult(true, text = title, dueDate = dueDate, repeatInterval = repeatStr)
+                val items = mutableListOf<LlmTodoItem>()
+                for (i in 0 until array.length()) {
+                    val obj = array.optJSONObject(i)
+                    if (obj != null) {
+                        val item = parseItem(obj)
+                        if (item.title.isNotBlank()) items.add(item)
                     }
+                }
+                if (items.isNotEmpty()) {
+                    val first = items.first()
+                    return LlmResult(
+                        success = true, text = first.title,
+                        dueDate = first.dueDate, repeatInterval = first.repeatInterval,
+                        items = if (items.size > 1) items else null
+                    )
+                }
+            }
+
+            // Fallback: try single JSON object
+            val json = try { JSONObject(content) } catch (_: Exception) { null }
+            if (json != null) {
+                val item = parseItem(json)
+                if (item.title.isNotBlank()) {
+                    return LlmResult(success = true, text = item.title,
+                        dueDate = item.dueDate, repeatInterval = item.repeatInterval)
                 }
             }
 

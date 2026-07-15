@@ -54,11 +54,13 @@ fun TodoScreen(
     var editingTodoId by remember { mutableStateOf<Long?>(null) }
     var editingText by remember { mutableStateOf("") }
     var showDatePicker by remember { mutableStateOf(false) }
+    var showTimePicker by remember { mutableStateOf(false) }
     var pendingDueDate by remember { mutableStateOf<Long?>(null) }
     var pendingRepeat by remember { mutableStateOf("NONE") }
     var showOptions by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val dateFormat = remember { SimpleDateFormat("MMM dd, yyyy", Locale.getDefault()) }
+    val timeFormat = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
 
     val datePickerState = rememberDatePickerState(
         initialSelectedDateMillis = pendingDueDate
@@ -296,26 +298,7 @@ fun TodoScreen(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        // Due date chip
-                        AssistChip(
-                            onClick = { showDatePicker = true },
-                            label = {
-                                Text(
-                                    if (pendingDueDate != null)
-                                        dateFormat.format(Date(pendingDueDate!!))
-                                    else "Set date",
-                                    fontSize = 12.sp
-                                )
-                            },
-                            leadingIcon = {
-                                Icon(Icons.Filled.DateRange, null, modifier = Modifier.size(14.dp))
-                            },
-                            shape = RoundedCornerShape(8.dp)
-                        )
-
-                        // Repeat interval chip
-                        // Using a simple clickable chip that cycles through options
-                        // to avoid dropdown issues
+                        // Repeat chip (left)
                         AssistChip(
                             onClick = {
                                 pendingRepeat = when (pendingRepeat) {
@@ -338,6 +321,44 @@ fun TodoScreen(
                             },
                             leadingIcon = {
                                 Icon(Icons.Filled.Loop, null, modifier = Modifier.size(14.dp))
+                            },
+                            shape = RoundedCornerShape(8.dp)
+                        )
+
+                        // Date chip (center)
+                        AssistChip(
+                            onClick = { showDatePicker = true },
+                            label = {
+                                Text(
+                                    if (pendingDueDate != null)
+                                        dateFormat.format(Date(pendingDueDate!!))
+                                    else "Date",
+                                    fontSize = 12.sp
+                                )
+                            },
+                            leadingIcon = {
+                                Icon(Icons.Filled.DateRange, null, modifier = Modifier.size(14.dp))
+                            },
+                            shape = RoundedCornerShape(8.dp)
+                        )
+
+                        // Time chip (right of date)
+                        val hasCustomTime = pendingDueDate?.let {
+                            val cal = Calendar.getInstance().apply { timeInMillis = it }
+                            cal.get(Calendar.HOUR_OF_DAY) != 23 || cal.get(Calendar.MINUTE) != 59
+                        } ?: false
+
+                        AssistChip(
+                            onClick = { showTimePicker = true },
+                            label = {
+                                Text(
+                                    if (hasCustomTime && pendingDueDate != null)
+                                        timeFormat.format(Date(pendingDueDate!!))
+                                    else "Time",
+                                    fontSize = 12.sp,
+                                    color = if (hasCustomTime) MaterialTheme.colorScheme.primary
+                                            else MaterialTheme.colorScheme.onSurface
+                                )
                             },
                             shape = RoundedCornerShape(8.dp)
                         )
@@ -376,6 +397,39 @@ fun TodoScreen(
             DatePicker(state = datePickerState)
         }
     }
+
+    // Time picker dialog
+    if (showTimePicker) {
+        val timePickerState = rememberTimePickerState(
+            initialHour = pendingDueDate?.let {
+                java.util.Calendar.getInstance().apply { timeInMillis = it }.get(java.util.Calendar.HOUR_OF_DAY)
+            } ?: 12,
+            initialMinute = pendingDueDate?.let {
+                java.util.Calendar.getInstance().apply { timeInMillis = it }.get(java.util.Calendar.MINUTE)
+            } ?: 0,
+            is24Hour = true
+        )
+        AlertDialog(
+            onDismissRequest = { showTimePicker = false },
+            title = { Text("Select Time", fontWeight = FontWeight.Bold) },
+            text = { TimePicker(state = timePickerState) },
+            confirmButton = {
+                TextButton(onClick = {
+                    val cal = java.util.Calendar.getInstance()
+                    pendingDueDate?.let { cal.timeInMillis = it }
+                    cal.set(java.util.Calendar.HOUR_OF_DAY, timePickerState.hour)
+                    cal.set(java.util.Calendar.MINUTE, timePickerState.minute)
+                    cal.set(java.util.Calendar.SECOND, 0)
+                    cal.set(java.util.Calendar.MILLISECOND, 0)
+                    pendingDueDate = cal.timeInMillis
+                    showTimePicker = false
+                }) { Text("OK") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showTimePicker = false }) { Text("Cancel") }
+            }
+        )
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -391,6 +445,7 @@ fun TodoItem(
     onCancelEdit: () -> Unit = {}
 ) {
     val dateFormat = remember { SimpleDateFormat("MMM dd", Locale.getDefault()) }
+    val timeFormat = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
     val isOverdue = todo.dueDate != null && todo.dueDate!! < System.currentTimeMillis() && !todo.isDone
 
     Row(
@@ -436,6 +491,7 @@ fun TodoItem(
             var editDueDate by remember { mutableStateOf(todo.dueDate) }
             var editRepeat by remember { mutableStateOf(todo.repeatInterval) }
             var showDatePicker by remember { mutableStateOf(false) }
+            var showTimePicker by remember { mutableStateOf(false) }
             val datePickerState = rememberDatePickerState(
                 initialSelectedDateMillis = editDueDate ?: System.currentTimeMillis()
             )
@@ -465,17 +521,13 @@ fun TodoItem(
                         )
                     )
 
-                    // Date, repeat chips + Done button in same row
+                    // Date, repeat, time chips + Done button
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.padding(top = 4.dp)
                     ) {
-                        AssistChip(
-                            onClick = { showDatePicker = true },
-                            label = { Text(editDueDate?.let { dateFormat.format(Date(it)) } ?: "Set date", fontSize = 11.sp) },
-                            shape = RoundedCornerShape(6.dp)
-                        )
+                        // Repeat chip (left)
                         AssistChip(
                             onClick = {
                                 editRepeat = when (editRepeat) {
@@ -493,6 +545,31 @@ fun TodoItem(
                                         "MONTHLY" -> "Monthly"
                                         else -> "Repeat"
                                     }, fontSize = 11.sp
+                                )
+                            },
+                            shape = RoundedCornerShape(6.dp)
+                        )
+                        // Date chip (center)
+                        AssistChip(
+                            onClick = { showDatePicker = true },
+                            label = { Text(editDueDate?.let { dateFormat.format(Date(it)) } ?: "Date", fontSize = 11.sp) },
+                            shape = RoundedCornerShape(6.dp)
+                        )
+                        // Time chip (right)
+                        val hasCustomTime = editDueDate?.let {
+                            val cal = java.util.Calendar.getInstance().apply { timeInMillis = it }
+                            cal.get(java.util.Calendar.HOUR_OF_DAY) != 23 || cal.get(java.util.Calendar.MINUTE) != 59
+                        } ?: false
+                        AssistChip(
+                            onClick = { showTimePicker = true },
+                            label = {
+                                Text(
+                                    if (hasCustomTime && editDueDate != null)
+                                        timeFormat.format(Date(editDueDate!!))
+                                    else "Time",
+                                    fontSize = 11.sp,
+                                    color = if (hasCustomTime) MaterialTheme.colorScheme.primary
+                                            else MaterialTheme.colorScheme.onSurface
                                 )
                             },
                             shape = RoundedCornerShape(6.dp)
@@ -524,6 +601,39 @@ fun TodoItem(
                     DatePicker(state = datePickerState)
                 }
             }
+
+            // Time picker dialog
+            if (showTimePicker) {
+                val timePickerState = rememberTimePickerState(
+                    initialHour = editDueDate?.let {
+                        java.util.Calendar.getInstance().apply { timeInMillis = it }.get(java.util.Calendar.HOUR_OF_DAY)
+                    } ?: 12,
+                    initialMinute = editDueDate?.let {
+                        java.util.Calendar.getInstance().apply { timeInMillis = it }.get(java.util.Calendar.MINUTE)
+                    } ?: 0,
+                    is24Hour = true
+                )
+                AlertDialog(
+                    onDismissRequest = { showTimePicker = false },
+                    title = { Text("Select Time", fontWeight = FontWeight.Bold) },
+                    text = { TimePicker(state = timePickerState) },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            val cal = java.util.Calendar.getInstance()
+                            editDueDate?.let { cal.timeInMillis = it }
+                            cal.set(java.util.Calendar.HOUR_OF_DAY, timePickerState.hour)
+                            cal.set(java.util.Calendar.MINUTE, timePickerState.minute)
+                            cal.set(java.util.Calendar.SECOND, 0)
+                            cal.set(java.util.Calendar.MILLISECOND, 0)
+                            editDueDate = cal.timeInMillis
+                            showTimePicker = false
+                        }) { Text("OK") }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showTimePicker = false }) { Text("Cancel") }
+                    }
+                )
+            }
         } else {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
@@ -545,8 +655,14 @@ fun TodoItem(
                             )
                         }
                         if (todo.dueDate != null) {
+                            val hasCustomTime = with(java.util.Calendar.getInstance()) {
+                                timeInMillis = todo.dueDate!!
+                                get(java.util.Calendar.HOUR_OF_DAY) != 23 || get(java.util.Calendar.MINUTE) != 59
+                            }
                             Text(
-                                text = dateFormat.format(Date(todo.dueDate!!)),
+                                text = if (hasCustomTime)
+                                    "${dateFormat.format(Date(todo.dueDate!!))} ${timeFormat.format(Date(todo.dueDate!!))}"
+                                else dateFormat.format(Date(todo.dueDate!!)),
                                 fontSize = 11.sp,
                                 color = if (isOverdue) Color(0xFFFF3B30) else TextSecondary
                             )

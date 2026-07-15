@@ -11,7 +11,7 @@ import kotlinx.coroutines.flow.Flow
 @Dao
 interface TodoDao {
 
-    @Query("SELECT * FROM todos WHERE isArchived = 0 ORDER BY createdAt ASC")
+    @Query("SELECT * FROM todos WHERE isArchived = 0 ORDER BY CASE WHEN dueDate IS NULL THEN 1 ELSE 0 END, dueDate ASC, createdAt ASC")
     fun getAllActive(): Flow<List<TodoEntity>>
 
     @Query("SELECT * FROM todos WHERE isDone = 0 AND isArchived = 0 ORDER BY createdAt ASC")
