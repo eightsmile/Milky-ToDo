@@ -142,13 +142,24 @@ class ApiService(private val settings: SettingsDataStore) {
                 }
                 var dueDate = parseDateString(dateStr)
                 // Apply time if provided
-                if (dueDate != null && !timeStr.equals("none", true) && timeStr.isNotBlank()) {
+                if (!timeStr.equals("none", true) && timeStr.isNotBlank()) {
                     val parts = timeStr.split(":")
                     if (parts.size == 2) {
                         try {
                             val h = parts[0].toInt()
                             val m = parts[1].toInt()
-                            val cal = Calendar.getInstance().apply { timeInMillis = dueDate!! }
+                            val cal = Calendar.getInstance().apply {
+                                // If no date was given, default to today
+                                if (dueDate == null) {
+                                    timeInMillis = System.currentTimeMillis()
+                                    set(Calendar.HOUR_OF_DAY, 0)
+                                    set(Calendar.MINUTE, 0)
+                                    set(Calendar.SECOND, 0)
+                                    set(Calendar.MILLISECOND, 0)
+                                } else {
+                                    timeInMillis = dueDate
+                                }
+                            }
                             cal.set(Calendar.HOUR_OF_DAY, h)
                             cal.set(Calendar.MINUTE, m)
                             cal.set(Calendar.SECOND, 0)
