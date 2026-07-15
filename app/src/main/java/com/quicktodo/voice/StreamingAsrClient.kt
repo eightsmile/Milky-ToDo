@@ -3,6 +3,7 @@ package com.quicktodo.voice
 import okhttp3.*
 import okio.ByteString
 import org.json.JSONObject
+import java.io.ByteArrayOutputStream
 import java.nio.ByteBuffer
 import java.util.UUID
 import java.util.concurrent.CountDownLatch
@@ -27,6 +28,7 @@ class StreamingAsrClient(
     private val resultBuilder = StringBuilder()
     private var errorMsg: String? = null
     private var sequenceNum = 0
+    private val configSent = CountDownLatch(1)
 
     companion object {
         const val MSG_FULL_REQUEST = 0b0001
@@ -37,16 +39,33 @@ class StreamingAsrClient(
         const val FLAG_LAST_HAS_SEQ = 0b0011
     }
 
-    private fun makeHeader(messageType: Int, flags: Int): ByteArray {
-        val headerSize = 8 // always include sequence number
-        val header = ByteArray(headerSize)
-        header[0] = ((0b0001 shl 4) or (headerSize / 4)).toByte()
-        header[1] = ((messageType shl 4) or flags).toByte()
-        header[2] = 0b0001_0000.toByte() // JSON serialization, no compression
+    private fun makeFrame(messageType: Int, flags: Int, payload: ByteArray): ByteArray {
+        val hasSeq = true // always include sequence
+        val headerSize = 4 // base header without seq
+        val totalHeaderSize = if (hasSeq) headerSize + 4 else headerSize // +4 for seq
+
+        val frame = ByteArrayOutputStream()
+        // Byte 0: version(4) + header_size(4) in 4-byte units
+        frame.write(((0b0001 shl 4) or (totalHeaderSize / 4)).toInt())
+        // Byte 1: message_type(4) + flags(4)
+        frame.write(((messageType shl 4) or flags).toInt())
+        // Byte 2: serialization(4)=JSON(1) + compression(4)=none(0)
+        frame.write(0b0001_0000.toInt())
+        // Byte 3: reserved
+        frame.write(0)
+
+        // Write sequence number (4 bytes, big-endian)
         val seq = if (flags == FLAG_LAST_HAS_SEQ) -(++sequenceNum) else ++sequenceNum
         val seqBytes = ByteBuffer.allocate(4).putInt(seq).array()
-        System.arraycopy(seqBytes, 0, header, 4, 4)
-        return header
+        frame.write(seqBytes)
+
+        // Write payload
+        frame.write(payload)
+
+        // Mark config as sent
+        if (messageType == MSG_FULL_REQUEST) configSent.countDown()
+
+        return frame.toByteArray()
     }
 
     fun transcribe(audioProvider: (ChunkSender) -> Unit): StreamingAsrResult {
@@ -62,7 +81,7 @@ class StreamingAsrClient(
 
         webSocket = client.newWebSocket(reqBuilder.build(), object : WebSocketListener() {
             override fun onOpen(ws: WebSocket, response: Response) {
-                // Send full client request
+                // Send full client request (JSON config)
                 val config = JSONObject().apply {
                     put("user", JSONObject().apply { put("uid", apiKey.take(15)) })
                     put("audio", JSONObject().apply {
@@ -78,8 +97,8 @@ class StreamingAsrClient(
                     })
                 }
                 val payload = config.toString().toByteArray(Charsets.UTF_8)
-                val header = makeHeader(MSG_FULL_REQUEST, FLAG_HAS_SEQ)
-                ws.send(ByteString.of(*header, *payload))
+                val frame = makeFrame(MSG_FULL_REQUEST, FLAG_HAS_SEQ, payload)
+                ws.send(okio.Buffer().write(frame).snapshot())
 
                 // Start audio streaming in background thread
                 Thread {
@@ -87,8 +106,8 @@ class StreamingAsrClient(
                         audioProvider(object : ChunkSender {
                             override fun sendChunk(data: ByteArray, isLast: Boolean) {
                                 val flags = if (isLast) FLAG_LAST_HAS_SEQ else FLAG_HAS_SEQ
-                                val hdr = makeHeader(MSG_AUDIO_ONLY, flags)
-                                webSocket?.send(ByteString.of(*hdr, *data))
+                                val frame = makeFrame(MSG_AUDIO_ONLY, flags, data)
+                                webSocket?.send(okio.Buffer().write(frame).snapshot())
                             }
                         })
                     } catch (e: Exception) {
@@ -100,12 +119,14 @@ class StreamingAsrClient(
             override fun onMessage(ws: WebSocket, bytes: ByteString) {
                 if (bytes.size < 4) return
                 val raw = bytes.toByteArray()
+                val flags = raw[1].toInt() and 0x0F
                 val messageType = (raw[1].toInt() shr 4) and 0x0F
 
                 when (messageType) {
                     MSG_SERVER_RESPONSE -> {
-                        val headerLen = if (raw.size >= 8 && (raw[0].toInt() and 0x0F) > 1) 8 else 4
-                        val payloadStart = if (raw.size > headerLen + 4 && (raw[1].toInt() and 0x0F) == 0b0011) headerLen + 4 else headerLen
+                        // Determine payload start: base header(4) + seq(4 if flag says so)
+                        val hasSeq = flags == FLAG_HAS_SEQ || flags == FLAG_LAST_HAS_SEQ
+                        val payloadStart = if (hasSeq) 8 else 4
                         if (payloadStart < raw.size) {
                             val payloadStr = raw.copyOfRange(payloadStart, raw.size).toString(Charsets.UTF_8).trim()
                             if (payloadStr.isNotEmpty()) {
@@ -116,21 +137,20 @@ class StreamingAsrClient(
                                         val text = result.optString("text", "")
                                         if (text.isNotEmpty()) resultBuilder.append(text)
                                     }
-                                    if (json.has("code")) {
-                                        val code = json.optInt("code")
-                                        if (code == 20000000) {
-                                            latch.countDown()
-                                        }
+                                    // Complete result
+                                    val code = json.optInt("code", -1)
+                                    if (code == 20000000) {
+                                        latch.countDown()
                                     }
                                 } catch (_: Exception) { }
                             }
                         }
                     }
                     MSG_ERROR -> {
-                        val payloadStr = bytes.utf8()
-                        errorMsg = "ASR error: ${payloadStr.take(200)}"
+                        errorMsg = "ASR error: ${bytes.utf8().take(200)}"
                         latch.countDown()
                     }
+                    else -> { /* ignore other types */ }
                 }
             }
 
