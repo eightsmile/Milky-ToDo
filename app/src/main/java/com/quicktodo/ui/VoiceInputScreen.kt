@@ -307,7 +307,7 @@ fun VoiceInputScreen(
                                         rec.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
                                         rec.setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
                                         rec.setAudioSamplingRate(44100)
-                                        rec.setAudioEncodingBitRate(128000)
+                                        rec.setAudioEncodingBitRate(32000) // 32kbps sufficient for speech
                                         rec.setAudioChannels(1)
                                         rec.setOutputFile(file.absolutePath)
                                         rec.prepare()

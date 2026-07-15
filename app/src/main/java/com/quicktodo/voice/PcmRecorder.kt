@@ -7,6 +7,8 @@ import android.media.AudioRecord
 import android.media.MediaRecorder
 import androidx.core.content.ContextCompat
 import java.io.ByteArrayOutputStream
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 
 class PcmRecorder(private val context: android.content.Context) {
 
@@ -42,22 +44,21 @@ class PcmRecorder(private val context: android.content.Context) {
             onError("Sample rate $SAMPLE_RATE not supported")
             return
         }
-        onDebug?.invoke("Min buffer: $minBuffer bytes")
 
-        val bufferSize = minBuffer.coerceAtLeast(SAMPLE_RATE * 2 / 5) // at least 100ms
-        onDebug?.invoke("Buffer size: $bufferSize bytes")
+        // Use exactly the min buffer to avoid any resampling artifacts
+        val bufferSize = minBuffer.coerceAtLeast(SAMPLE_RATE * 2 / 10) // ~100ms
+        onDebug?.invoke("PCM: minBuf=$minBuffer bufSize=$bufferSize")
 
+        // Try built-in VOICE_RECOGNITION first, fall back to MIC
         audioRecord = try {
-            AudioRecord(
-                MediaRecorder.AudioSource.VOICE_RECOGNITION,
-                SAMPLE_RATE,
-                AudioFormat.CHANNEL_IN_MONO,
-                AudioFormat.ENCODING_PCM_16BIT,
-                bufferSize
-            )
+            createAudioRecord(MediaRecorder.AudioSource.VOICE_RECOGNITION, bufferSize)
         } catch (e: Exception) {
-            onError("AudioRecord failed: ${e.message}")
-            return
+            try {
+                createAudioRecord(MediaRecorder.AudioSource.MIC, bufferSize)
+            } catch (e2: Exception) {
+                onError("AudioRecord failed: ${e2.message}")
+                return
+            }
         }
 
         if (audioRecord?.state != AudioRecord.STATE_INITIALIZED) {
@@ -68,25 +69,38 @@ class PcmRecorder(private val context: android.content.Context) {
         buffer.reset()
         isRecording = true
         audioRecord?.startRecording()
-        onDebug?.invoke("Recording started at $SAMPLE_RATE Hz")
+        onDebug?.invoke("PCM: recording at $SAMPLE_RATE Hz")
 
-        // Read in background thread
-        Thread {
-            val readBuffer = ShortArray(bufferSize / 2)
+        // Read in background thread to avoid blocking
+        Thread({
+            val shortBuf = ShortArray(bufferSize / 2)
+            val byteBuf = ByteBuffer.allocate(bufferSize)
+            byteBuf.order(ByteOrder.LITTLE_ENDIAN)
+            val byteShortBuf = byteBuf.asShortBuffer()
+
             try {
                 while (isRecording) {
-                    val read = audioRecord?.read(readBuffer, 0, readBuffer.size) ?: -1
+                    val read = audioRecord?.read(shortBuf, 0, shortBuf.size) ?: -1
                     if (read > 0) {
-                        // Convert ShortArray to little-endian ByteArray
-                        for (i in 0 until read) {
-                            val s = readBuffer[i].toInt()
-                            buffer.write(s and 0xFF)
-                            buffer.write((s shr 8) and 0xFF)
-                        }
+                        byteBuf.clear()
+                        byteShortBuf.clear()
+                        byteShortBuf.put(shortBuf, 0, read)
+                        byteBuf.position(0)
+                        buffer.write(byteBuf.array(), 0, read * 2)
                     } else if (read < 0) break
                 }
             } catch (_: Exception) { }
-        }.start()
+        }, "PcmRecorder").start()
+    }
+
+    private fun createAudioRecord(source: Int, bufferSize: Int): AudioRecord {
+        return AudioRecord(
+            source,
+            SAMPLE_RATE,
+            AudioFormat.CHANNEL_IN_MONO,
+            AudioFormat.ENCODING_PCM_16BIT,
+            bufferSize
+        )
     }
 
     fun signalStop(): ByteArray {

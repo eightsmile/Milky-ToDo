@@ -134,12 +134,6 @@ class StreamingAsrClient(
                                     if (result != null) {
                                         val text = result.optString("text", "")
                                         if (text.isNotEmpty()) resultBuilder.append(text)
-                                        // Any result response means processing is done
-                                        latch.countDown()
-                                    }
-                                    // Also handle explicit completion code
-                                    if (json.has("code") && json.optInt("code") == 20000000) {
-                                        latch.countDown()
                                     }
                                 } catch (_: Exception) { }
                             }
