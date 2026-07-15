@@ -18,6 +18,7 @@ class SettingsDataStore(private val context: Context) {
         val STT_API_KEY = stringPreferencesKey("stt_api_key")
         val STT_MODEL = stringPreferencesKey("stt_model")
         val STT_RESOURCE_ID = stringPreferencesKey("stt_resource_id")
+        val STT_MODE = stringPreferencesKey("stt_mode")
         val LLM_ENDPOINT = stringPreferencesKey("llm_endpoint")
         val LLM_API_KEY = stringPreferencesKey("llm_api_key")
         val LLM_MODEL = stringPreferencesKey("llm_model")
@@ -27,6 +28,7 @@ class SettingsDataStore(private val context: Context) {
     val sttApiKey: Flow<String> = context.settingsStore.data.map { it[STT_API_KEY] ?: "" }
     val sttModel: Flow<String> = context.settingsStore.data.map { it[STT_MODEL] ?: "whisper-1" }
     val sttResourceId: Flow<String> = context.settingsStore.data.map { it[STT_RESOURCE_ID] ?: "" }
+    val sttMode: Flow<String> = context.settingsStore.data.map { it[STT_MODE] ?: "flash" }
     val llmEndpoint: Flow<String> = context.settingsStore.data.map { it[LLM_ENDPOINT] ?: "" }
     val llmApiKey: Flow<String> = context.settingsStore.data.map { it[LLM_API_KEY] ?: "" }
     val llmModel: Flow<String> = context.settingsStore.data.map { it[LLM_MODEL] ?: "deepseek-v4-flash" }
@@ -35,16 +37,18 @@ class SettingsDataStore(private val context: Context) {
     fun getSttApiKeySync(): String = runBlocking { sttApiKey.first() }
     fun getSttModelSync(): String = runBlocking { sttModel.first() }
     fun getSttResourceIdSync(): String = runBlocking { sttResourceId.first() }
+    fun getSttModeSync(): String = runBlocking { sttMode.first() }
     fun getLlmEndpointSync(): String = runBlocking { llmEndpoint.first() }
     fun getLlmApiKeySync(): String = runBlocking { llmApiKey.first() }
     fun getLlmModelSync(): String = runBlocking { llmModel.first() }
 
-    suspend fun saveSttSettings(endpoint: String, apiKey: String, model: String, resourceId: String) {
+    suspend fun saveSttSettings(endpoint: String, apiKey: String, model: String, resourceId: String, mode: String) {
         context.settingsStore.edit { prefs ->
             prefs[STT_ENDPOINT] = endpoint
             prefs[STT_API_KEY] = apiKey
             prefs[STT_MODEL] = model
             prefs[STT_RESOURCE_ID] = resourceId
+            prefs[STT_MODE] = mode
         }
     }
 

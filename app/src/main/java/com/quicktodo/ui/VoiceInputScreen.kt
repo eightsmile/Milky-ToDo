@@ -34,12 +34,15 @@ import com.quicktodo.QuickTodoApp
 import com.quicktodo.ui.theme.TextSecondary
 import com.quicktodo.voice.ApiService
 import com.quicktodo.voice.LlmTodoItem
+import com.quicktodo.voice.StreamingAudioRecorder
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 data class EditableTodoItem(
     val title: String,
@@ -71,15 +74,7 @@ fun VoiceInputScreen(
         if (!granted) errorMessage = "Microphone permission required"
     }
 
-    val pulse = rememberInfiniteTransition(label = "pulse")
-    val pulseScale by pulse.animateFloat(1f, 1.15f, animationSpec = infiniteRepeatable(
-        tween(800, easing = EaseInOutCubic), RepeatMode.Reverse
-    ), label = "pulseScale")
-
-    DisposableEffect(Unit) {
-        onDispose { mediaRecorder?.release(); audioFile?.delete() }
-    }
-
+    // Helper to process LLM result into todoItems
     fun applyTimeToDate(dueDate: Long?, timeStr: String): Long? {
         if (dueDate == null || timeStr.isBlank() || timeStr.equals("none", true)) return dueDate
         val parts = timeStr.split(":")
@@ -93,6 +88,36 @@ fun VoiceInputScreen(
             cal.timeInMillis
         } catch (_: Exception) { dueDate }
     }
+
+    fun processLlmResult(llm: com.quicktodo.voice.LlmResult) {
+        if (llm.items != null && llm.items.size > 1) {
+            todoItems = llm.items.map {
+                EditableTodoItem(
+                    title = it.title,
+                    dueDate = applyTimeToDate(it.dueDate, ""),
+                    repeatInterval = it.repeatInterval
+                )
+            }
+        } else {
+            todoItems = listOf(
+                EditableTodoItem(
+                    title = if (llm.success) llm.text else originalText,
+                    dueDate = llm.dueDate,
+                    repeatInterval = llm.repeatInterval
+                )
+            )
+        }
+    }
+
+    val pulse = rememberInfiniteTransition(label = "pulse")
+    val pulseScale by pulse.animateFloat(1f, 1.15f, animationSpec = infiniteRepeatable(
+        tween(800, easing = EaseInOutCubic), RepeatMode.Reverse
+    ), label = "pulseScale")
+
+    DisposableEffect(Unit) {
+        onDispose { mediaRecorder?.release(); audioFile?.delete() }
+    }
+
 
     Scaffold(
         topBar = {
@@ -214,6 +239,41 @@ fun VoiceInputScreen(
                                         }
                                         errorMessage = ""
 
+                                        // Check mode first
+                                        val api = ApiService(QuickTodoApp.instance.settingsDataStore)
+                                        val isStreaming = api.isStreamingMode()
+
+                                        if (isStreaming) {
+                                            // Streaming mode: no MediaRecorder needed
+                                            isProcessing = true
+                                            scope.launch {
+                                                val streamingRecorder = StreamingAudioRecorder(context)
+                                                val result = withContext(Dispatchers.IO) {
+                                                    api.transcribeAudioStream { sender ->
+                                                        streamingRecorder.start(
+                                                            onChunk = { data, isLast ->
+                                                                sender.sendChunk(data, isLast)
+                                                            },
+                                                            onComplete = { },
+                                                            onError = { err ->
+                                                                errorMessage = err
+                                                            }
+                                                        )
+                                                    }
+                                                }
+                                                if (!result.success) {
+                                                    errorMessage = result.error
+                                                } else {
+                                                    originalText = result.text
+                                                    val llm = api.refineText(originalText)
+                                                    processLlmResult(llm)
+                                                }
+                                                isProcessing = false
+                                            }
+                                            return@detectTapGestures
+                                        }
+
+                                        // Flash mode: use MediaRecorder
                                         val file = File.createTempFile("voice", ".m4a", context.cacheDir)
                                         audioFile = file
                                         val rec = if (Build.VERSION.SDK_INT >= 31) MediaRecorder(context) else MediaRecorder()
@@ -242,9 +302,6 @@ fun VoiceInputScreen(
                                             return@detectTapGestures
                                         }
 
-                                        try { rec.stop() } catch (_: Exception) { }
-                                        rec.release()
-                                        mediaRecorder = null
                                         isRecording = false
                                         isProcessing = true
 
@@ -257,28 +314,12 @@ fun VoiceInputScreen(
                                                 return@launch
                                             }
                                             originalText = stt.text
-                                            val llm = api.refineText(stt.text)
-                                            if (llm.items != null && llm.items.size > 1) {
-                                                todoItems = llm.items.map {
-                                                    EditableTodoItem(
-                                                        title = it.title,
-                                                        dueDate = applyTimeToDate(it.dueDate, ""),
-                                                        repeatInterval = it.repeatInterval
-                                                    )
-                                                }
-                                            } else {
-                                                todoItems = listOf(
-                                                    EditableTodoItem(
-                                                        title = if (llm.success) llm.text else stt.text,
-                                                        dueDate = llm.dueDate,
-                                                        repeatInterval = llm.repeatInterval
-                                                    )
-                                                )
-                                            }
+                                            val llm = api.refineText(originalText)
+                                            processLlmResult(llm)
                                             isProcessing = false
                                             showReview = true
-                                        }
-                                    })
+                                        }  // close scope.launch
+                                    })  // close onPress + detectTapGestures
                                 },
                             contentAlignment = Alignment.Center
                         ) {

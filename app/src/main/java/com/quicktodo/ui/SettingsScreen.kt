@@ -28,6 +28,7 @@ fun SettingsScreen(
     var sttApiKey by remember { mutableStateOf("") }
     var sttModel by remember { mutableStateOf("") }
     var sttResourceId by remember { mutableStateOf("") }
+    var sttMode by remember { mutableStateOf("flash") }
     var llmEndpoint by remember { mutableStateOf("") }
     var llmApiKey by remember { mutableStateOf("") }
     var llmModel by remember { mutableStateOf("") }
@@ -39,6 +40,7 @@ fun SettingsScreen(
         sttApiKey = settings.sttApiKey.first()
         sttModel = settings.sttModel.first()
         sttResourceId = settings.sttResourceId.first()
+        sttMode = settings.sttMode.first()
         llmEndpoint = settings.llmEndpoint.first()
         llmApiKey = settings.llmApiKey.first()
         llmModel = settings.llmModel.first()
@@ -134,6 +136,7 @@ fun SettingsScreen(
                         sttEndpoint = "https://openspeech.bytedance.com/api/v3/auc/bigmodel/recognize/flash"
                         sttModel = "bigmodel"
                         sttResourceId = "volc.bigasr.auc_turbo"
+                        sttMode = "flash"
                     },
                     label = { Text("Doubao ASR", fontSize = 11.sp) },
                     shape = RoundedCornerShape(8.dp)
@@ -144,6 +147,26 @@ fun SettingsScreen(
                         sttModel = "whisper-1"
                     },
                     label = { Text("OpenAI Whisper", fontSize = 11.sp) },
+                    shape = RoundedCornerShape(8.dp)
+                )
+                SuggestionChip(
+                    onClick = {
+                        sttEndpoint = "wss://openspeech.bytedance.com/api/v3/sauc/bigmodel"
+                        sttModel = "bigmodel"
+                        sttResourceId = "volc.seedasr.sauc.duration"
+                        sttMode = "streaming"
+                    },
+                    label = { Text("Doubao WS 2.0", fontSize = 11.sp) },
+                    shape = RoundedCornerShape(8.dp)
+                )
+                SuggestionChip(
+                    onClick = {
+                        sttEndpoint = "wss://openspeech.bytedance.com/api/v3/sauc/bigmodel_async"
+                        sttModel = "bigmodel"
+                        sttResourceId = "volc.seedasr.sauc.duration"
+                        sttMode = "streaming"
+                    },
+                    label = { Text("Doubao WS 2.0(优化)", fontSize = 10.sp) },
                     shape = RoundedCornerShape(8.dp)
                 )
             }
@@ -322,7 +345,7 @@ fun SettingsScreen(
             Button(
                 onClick = {
                     scope.launch {
-                        settings.saveSttSettings(sttEndpoint, sttApiKey, sttModel, sttResourceId)
+                        settings.saveSttSettings(sttEndpoint, sttApiKey, sttModel, sttResourceId, sttMode)
                         settings.saveLlmSettings(llmEndpoint, llmApiKey, llmModel)
                         saveMessage = "Saved!"
                     }

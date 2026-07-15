@@ -35,6 +35,10 @@ data class LlmResult(
 
 class ApiService(private val settings: SettingsDataStore) {
 
+    suspend fun isStreamingMode(): Boolean {
+        return settings.sttMode.first() == "streaming"
+    }
+
     private val client = OkHttpClient.Builder()
         .connectTimeout(30, TimeUnit.SECONDS).readTimeout(120, TimeUnit.SECONDS)
         .writeTimeout(120, TimeUnit.SECONDS).build()
@@ -77,6 +81,24 @@ class ApiService(private val settings: SettingsDataStore) {
             return SttResult(true, text = text)
         } catch (e: Exception) {
             return SttResult(false, error = "STT failed: ${e.localizedMessage ?: "Unknown"}")
+        }
+    }
+
+    suspend fun transcribeAudioStream(
+        audioProvider: (StreamingAsrClient.ChunkSender) -> Unit
+    ): SttResult {
+        val ak = settings.sttApiKey.first()
+        if (ak.isBlank()) return SttResult(false, error = "STT API key not configured")
+        val rid = settings.sttResourceId.first().ifBlank { "volc.seedasr.sauc.duration" }
+        val ep = settings.sttEndpoint.first().ifBlank {
+            "wss://openspeech.bytedance.com/api/v3/sauc/bigmodel"
+        }
+
+        return withContext(Dispatchers.IO) {
+            val cl = StreamingAsrClient(ak, rid, ep)
+            val result = cl.transcribe(audioProvider)
+            if (result.success) SttResult(true, text = result.text)
+            else SttResult(false, error = result.error)
         }
     }
 
