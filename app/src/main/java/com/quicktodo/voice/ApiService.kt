@@ -90,21 +90,14 @@ class ApiService(private val settings: SettingsDataStore) {
             }
             val md = settings.llmModel.first().ifBlank { "deepseek-chat" }
 
-            val sysPrompt = "请将用户的语音转写内容整理为待办事项，以JSON数组格式返回。\n\n" +
-                "要求：\n" +
-                "1. 每项任务对应一个JSON对象，格式：{\"title\": \"...\", \"date\": \"...或none\", \"time\": \"...或none\", \"repeat\": \"DAILY/WEEKLY/MONTHLY/NONE\"}\n" +
-                "2. 返回JSON数组[...]，多个任务用多个对象\n" +
-                "3. 如果只有一个任务，也返回数组[{...}]\n" +
-                "4. title：对内容进行改写，但尽量保留用户原始表达的含义和内容长度。只删除语气词（如\"嗯\"、\"啊\"、\"那个\"）、无效重复、以及明显说错的内容。不要过度精简或改写，保留完整意图。\n" +
-                "5. date：提取日期，如\"3月15日\"、\"下周一\"；未提及则为\"none\"\n" +
-                "6. time：提取具体时间（24小时制），如\"下午3点\"→\"15:00\"、\"晚上8点半\"→\"20:30\"；未提及则为\"none\"\n" +
-                "7. repeat：提取重复周期，\"DAILY\"/\"WEEKLY\"/\"MONTHLY\"/\"NONE\"\n" +
-                "8. 信息不明确时，不要擅自推测\n" +
-                "9. 仅输出JSON数组，不添加解释\n\n" +
-                "示例：\n" +
-                " \"明天下午3点去买牛奶\" -> [{\"title\":\"买牛奶\",\"date\":\"明天\",\"time\":\"15:00\",\"repeat\":\"NONE\"}]\n" +
-                " \"每周一上午10点开周会，每天吃药\" -> [{\"title\":\"每周一开周会\",\"date\":\"下周一\",\"time\":\"10:00\",\"repeat\":\"WEEKLY\"},{\"title\":\"每天吃药\",\"date\":\"none\",\"time\":\"none\",\"repeat\":\"DAILY\"}]\n" +
-                " \"每个月1号交话费\" -> [{\"title\":\"交话费\",\"date\":\"下个月1号\",\"time\":\"none\",\"repeat\":\"MONTHLY\"}]\n\n" +
+            val sysPrompt = "将语音转写为JSON数组，格式：[{\"title\":\"...\",\"date\":\"...\",\"time\":\"...\",\"repeat\":\"DAILY/WEEKLY/MONTHLY/NONE\"}]\n" +
+                "规则：\n" +
+                "- title：保留原意，删语气词\n" +
+                "- date：提取日期（如\"明天\"、\"下周一\"），无则为\"none\"\n" +
+                "- time：提取24h时间（如\"下午3点\"→\"15:00\"），无则为\"none\"\n" +
+                "- repeat：提取重复周期，无则为\"NONE\"\n" +
+                "- 多任务返回多个对象\n" +
+                "- 仅输出JSON数组，不要解释\n\n" +
                 "语音内容：\n" + rawText
 
             val msgs = org.json.JSONArray().apply {
@@ -128,6 +121,12 @@ class ApiService(private val settings: SettingsDataStore) {
                 ?.trim() ?: ""
 
             if (content.isBlank()) return LlmResult(false, error = "LLM empty")
+
+            // Strip markdown code blocks if present
+            val cleanContent = content
+                .replace(Regex("```json\\s*", RegexOption.IGNORE_CASE), "")
+                .replace(Regex("```\\s*$", RegexOption.MULTILINE), "")
+                .trim()
 
             fun parseItem(obj: JSONObject): LlmTodoItem {
                 val title = obj.optString("title", "").trim()
@@ -162,7 +161,7 @@ class ApiService(private val settings: SettingsDataStore) {
             }
 
             // Try JSONArray first (new format)
-            val array = try { JSONArray(content) } catch (_: Exception) { null }
+            val array = try { JSONArray(cleanContent) } catch (_: Exception) { null }
             if (array != null && array.length() > 0) {
                 val items = mutableListOf<LlmTodoItem>()
                 for (i in 0 until array.length()) {
@@ -183,7 +182,7 @@ class ApiService(private val settings: SettingsDataStore) {
             }
 
             // Fallback: try single JSON object
-            val json = try { JSONObject(content) } catch (_: Exception) { null }
+            val json = try { JSONObject(cleanContent) } catch (_: Exception) { null }
             if (json != null) {
                 val item = parseItem(json)
                 if (item.title.isNotBlank()) {
@@ -193,7 +192,7 @@ class ApiService(private val settings: SettingsDataStore) {
             }
 
             // Plain text fallback: take first meaningful line, skip garbage
-            val clean = content.trim().replace(Regex("^[\\[\\]{}()\"'\\s,]+|[\\[\\]{}()\"'\\s,]+$\""), "").trim()
+            val clean = cleanContent.trim().replace(Regex("^[\\[\\]{}()\"'\\s,]+|[\\[\\]{}()\"'\\s,]+$\""), "").trim()
             val firstLine = clean.lines().firstOrNull { it.isNotBlank() && it.length > 1 } ?: content
             return LlmResult(true, text = firstLine)
         } catch (e: Exception) {
