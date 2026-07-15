@@ -78,6 +78,7 @@ class StreamingAsrClient(
             .header("X-Api-Resource-Id", resourceId)
             .header("X-Api-Request-Id", requestId)
             .header("X-Api-Sequence", "-1")
+            .header("X-Api-Connect-Id", requestId)
 
         webSocket = client.newWebSocket(reqBuilder.build(), object : WebSocketListener() {
             override fun onOpen(ws: WebSocket, response: Response) {

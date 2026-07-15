@@ -171,7 +171,7 @@ fun SettingsScreen(
                 )
             }
  
-             HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
+            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
 
             // === LLM Section ===
             Text(
