@@ -151,22 +151,12 @@ fun SettingsScreen(
                 )
                 SuggestionChip(
                     onClick = {
-                        sttEndpoint = "wss://openspeech.bytedance.com/api/v3/sauc/bigmodel"
-                        sttModel = "bigmodel"
-                        sttResourceId = "volc.seedasr.sauc.duration"
-                        sttMode = "streaming"
-                    },
-                    label = { Text("Doubao WS 2.0", fontSize = 11.sp) },
-                    shape = RoundedCornerShape(8.dp)
-                )
-                SuggestionChip(
-                    onClick = {
                         sttEndpoint = "wss://openspeech.bytedance.com/api/v3/sauc/bigmodel_async"
                         sttModel = "bigmodel"
                         sttResourceId = "volc.seedasr.sauc.duration"
                         sttMode = "streaming"
                     },
-                    label = { Text("Doubao WS 2.0(优化)", fontSize = 10.sp) },
+                    label = { Text("Doubao WS 2.0", fontSize = 11.sp) },
                     shape = RoundedCornerShape(8.dp)
                 )
             }

@@ -41,6 +41,7 @@ import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.async
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -244,31 +245,43 @@ fun VoiceInputScreen(
                                         val isStreaming = api.isStreamingMode()
 
                                         if (isStreaming) {
-                                            // Streaming mode: no MediaRecorder needed
+                                            // Streaming mode
+                                            isProcessing = false  // will show recording UI
+                                            isRecording = true
+                                            val streamingRecorder = StreamingAudioRecorder(context)
+
+                                            // Start transcription in background
+                                            val deferred = scope.async(Dispatchers.IO) {
+                                                api.transcribeAudioStream { sender ->
+                                                    streamingRecorder.start(
+                                                        onChunk = { data, isLast ->
+                                                            sender.sendChunk(data, isLast)
+                                                        },
+                                                        onComplete = { },
+                                                        onError = { err ->
+                                                            errorMessage = err
+                                                        }
+                                                    )
+                                                }
+                                            }
+
+                                            // Wait for user to release
+                                            tryAwaitRelease()
+                                            isRecording = false
+                                            streamingRecorder.stop()
                                             isProcessing = true
-                                            scope.launch {
-                                                val streamingRecorder = StreamingAudioRecorder(context)
-                                                val result = withContext(Dispatchers.IO) {
-                                                    api.transcribeAudioStream { sender ->
-                                                        streamingRecorder.start(
-                                                            onChunk = { data, isLast ->
-                                                                sender.sendChunk(data, isLast)
-                                                            },
-                                                            onComplete = { },
-                                                            onError = { err ->
-                                                                errorMessage = err
-                                                            }
-                                                        )
-                                                    }
-                                                }
-                                                if (!result.success) {
-                                                    errorMessage = result.error
-                                                } else {
-                                                    originalText = result.text
-                                                    val llm = api.refineText(originalText)
-                                                    processLlmResult(llm)
-                                                }
+
+                                            // Get result
+                                            val result = deferred.await()
+                                            if (!result.success) {
+                                                errorMessage = result.error
                                                 isProcessing = false
+                                            } else {
+                                                originalText = result.text
+                                                val llm = api.refineText(originalText)
+                                                processLlmResult(llm)
+                                                isProcessing = false
+                                                showReview = true
                                             }
                                             return@detectTapGestures
                                         }
