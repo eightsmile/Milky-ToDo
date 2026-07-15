@@ -245,12 +245,11 @@ fun VoiceInputScreen(
                                         val isStreaming = api.isStreamingMode()
 
                                         if (isStreaming) {
-                                            // Streaming mode
-                                            isProcessing = false  // will show recording UI
+                                            // Streaming mode — WebSocket binary protocol
+                                            isProcessing = false  // show recording UI
                                             isRecording = true
                                             val streamingRecorder = StreamingAudioRecorder(context)
 
-                                            // Start transcription in background
                                             val deferred = scope.async(Dispatchers.IO) {
                                                 api.transcribeAudioStream { sender ->
                                                     streamingRecorder.start(
@@ -265,13 +264,11 @@ fun VoiceInputScreen(
                                                 }
                                             }
 
-                                            // Wait for user to release
                                             tryAwaitRelease()
                                             isRecording = false
                                             streamingRecorder.stop()
                                             isProcessing = true
 
-                                            // Get result
                                             val result = deferred.await()
                                             if (!result.success) {
                                                 errorMessage = result.error
