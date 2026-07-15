@@ -122,9 +122,8 @@ class StreamingAsrClient(
 
                 when (messageType) {
                     MSG_SERVER_RESPONSE -> {
-                        // Frame: base_header(4) + seq(4 if flag) + body_size(4) + payload
-                        val hasSeq = flags == FLAG_HAS_SEQ || flags == FLAG_LAST_HAS_SEQ
-                        val payloadStart = if (hasSeq) 12 else 8
+                        // Server ALWAYS sends seq + body_size, regardless of flags bit
+                        val payloadStart = 12
                         if (payloadStart < raw.size) {
                             val payloadStr = raw.copyOfRange(payloadStart, raw.size).toString(Charsets.UTF_8).trim()
                             if (payloadStr.isNotEmpty()) {
