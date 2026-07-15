@@ -34,7 +34,7 @@ import com.quicktodo.QuickTodoApp
 import com.quicktodo.ui.theme.TextSecondary
 import com.quicktodo.voice.ApiService
 import com.quicktodo.voice.LlmTodoItem
-import com.quicktodo.voice.StreamingAudioRecorder
+import com.quicktodo.voice.PcmRecorder
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -252,57 +252,49 @@ fun VoiceInputScreen(
                                         val isStreaming = api.isStreamingMode()
 
                                         if (isStreaming) {
-                                            // Streaming mode — WebSocket binary protocol
+                                            // WS mode: record full PCM, then send via WebSocket batch
                                             wsDebugLog = ""; wsRecBytes = 0
-
                                             isRecording = true
-                                            val streamingRecorder = StreamingAudioRecorder(context)
-                                            streamingRecorder.onDebug = { msg -> wsDebugLog += "$msg\n" }
-
-                                            val deferred = scope.async(Dispatchers.IO) {
-                                                api.transcribeAudioStream(
-                                                    audioProvider = { sender ->
-                                                        streamingRecorder.start(
-                                                            onChunk = { data, isLast ->
-                                                                sender.sendChunk(data, isLast)
-                                                                if (!isLast) wsRecBytes += data.size
-                                                            },
-                                                            onComplete = { },
-                                                            onError = { err ->
-                                                                wsDebugLog += "Rec error: $err\n"
-                                                                errorMessage = err
-                                                            }
-                                                        )
-                                                    },
-                                                    onDebug = { msg -> wsDebugLog += "$msg\n" }
-                                                )
+                                            val recorder = PcmRecorder(context)
+                                            recorder.onDebug = { msg -> wsDebugLog += "$msg\n" }
+                                            recorder.start { err ->
+                                                wsDebugLog += "Error: $err\n"
+                                                errorMessage = err
                                             }
 
                                             tryAwaitRelease()
                                             isRecording = false
-                                            val bytesCaptured = wsRecBytes
-                                            streamingRecorder.signalStop()  // only set flag, don't release yet
+                                            val pcmData = recorder.signalStop()
+                                            wsRecBytes = pcmData.size
 
-                                            if (bytesCaptured == 0) {
-                                                deferred.cancel()
+                                            if (pcmData.isEmpty()) {
                                                 errorMessage = "No Voice Recording"
                                                 wsDebugLog += "No audio captured\n"
                                                 return@detectTapGestures
                                             }
 
                                             isProcessing = true
-                                            wsDebugLog += "Captured ${bytesCaptured} bytes, waiting server...\n"
+                                            wsDebugLog += "Recorded ${pcmData.size} bytes\n"
+                                            wsDebugLog += "Sending to server via WebSocket...\n"
 
-                                            val result = deferred.await()
-                                            if (!result.success) {
-                                                errorMessage = result.error
-                                                isProcessing = false
-                                            } else {
-                                                originalText = result.text
-                                                val llm = api.refineText(originalText)
-                                                processLlmResult(llm)
-                                                isProcessing = false
-                                                showReview = true
+                                            scope.launch {
+                                                val api = ApiService(QuickTodoApp.instance.settingsDataStore)
+                                                wsDebugLog += "WS connecting...\n"
+                                                val result = withContext(Dispatchers.IO) {
+                                                    api.transcribePcmBatch(pcmData)
+                                                }
+                                                if (!result.success) {
+                                                    errorMessage = result.error
+                                                    wsDebugLog += "Error: ${result.error}\n"
+                                                    isProcessing = false
+                                                } else {
+                                                    wsDebugLog += "Server response OK\n"
+                                                    originalText = result.text
+                                                    val llm = api.refineText(originalText)
+                                                    processLlmResult(llm)
+                                                    isProcessing = false
+                                                    showReview = true
+                                                }
                                             }
                                             return@detectTapGestures
                                         }

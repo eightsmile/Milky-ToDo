@@ -84,6 +84,25 @@ class ApiService(private val settings: SettingsDataStore) {
         }
     }
 
+    suspend fun transcribePcmBatch(pcmData: ByteArray): SttResult {
+        return transcribeAudioStream(
+            audioProvider = { sender ->
+                // Send all PCM data in 200ms chunks
+                val chunkSize = 16000 * 2 * 200 / 1000  // 6400
+                var pos = 0
+                while (pos < pcmData.size) {
+                    val end = minOf(pos + chunkSize, pcmData.size)
+                    val chunk = pcmData.copyOfRange(pos, end)
+                    sender.sendChunk(chunk, false)
+                    pos = end
+                }
+                // Always send last packet
+                sender.sendChunk(ByteArray(0), true)
+            },
+            onDebug = null
+        )
+    }
+
     suspend fun transcribeAudioStream(
         audioProvider: (StreamingAsrClient.ChunkSender) -> Unit,
         onDebug: ((String) -> Unit)? = null
