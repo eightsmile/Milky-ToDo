@@ -252,9 +252,18 @@ fun VoiceInputScreen(
                                         val isStreaming = api.isStreamingMode()
 
                                         if (isStreaming) {
-                                            // WS mode: record full PCM, then send via WebSocket batch
+                                            // WS mode: pre-connect while recording
                                             wsDebugLog = ""; wsRecBytes = 0
                                             isRecording = true
+
+                                            // Pre-connect WebSocket in background
+                                            val api = ApiService(QuickTodoApp.instance.settingsDataStore)
+                                            wsDebugLog += "Pre-connecting WebSocket...\n"
+                                            val wsPreconnect = scope.async(Dispatchers.IO) {
+                                                api.prepareWsConnection()
+                                            }
+
+                                            // Record PCM
                                             val recorder = PcmRecorder(context)
                                             recorder.onDebug = { msg -> wsDebugLog += "$msg\n" }
                                             recorder.start { err ->
@@ -268,6 +277,7 @@ fun VoiceInputScreen(
                                             wsRecBytes = pcmData.size
 
                                             if (pcmData.isEmpty()) {
+                                                wsPreconnect.cancel()
                                                 errorMessage = "No Voice Recording"
                                                 wsDebugLog += "No audio captured\n"
                                                 return@detectTapGestures
@@ -275,11 +285,12 @@ fun VoiceInputScreen(
 
                                             isProcessing = true
                                             wsDebugLog += "Recorded ${pcmData.size} bytes\n"
-                                            wsDebugLog += "Sending to server via WebSocket...\n"
+                                            wsDebugLog += "Sending via WebSocket...\n"
 
                                             scope.launch {
-                                                val api = ApiService(QuickTodoApp.instance.settingsDataStore)
-                                                wsDebugLog += "WS connecting...\n"
+                                                // Wait for pre-connect, then send
+                                                wsPreconnect.await()
+                                                wsDebugLog += "WS ready, sending...\n"
                                                 val result = withContext(Dispatchers.IO) {
                                                     api.transcribePcmBatch(pcmData)
                                                 }

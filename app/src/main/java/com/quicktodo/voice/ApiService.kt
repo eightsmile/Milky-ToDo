@@ -84,6 +84,12 @@ class ApiService(private val settings: SettingsDataStore) {
         }
     }
 
+    // Lightweight "pre-warm" — just validates settings, no actual WS connect needed
+    suspend fun prepareWsConnection(): Boolean {
+        val ak = settings.sttApiKey.first()
+        return ak.isNotBlank()
+    }
+
     suspend fun transcribePcmBatch(pcmData: ByteArray): SttResult {
         return transcribeAudioStream(
             audioProvider = { sender ->

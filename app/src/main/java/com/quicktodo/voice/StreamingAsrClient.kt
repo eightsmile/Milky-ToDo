@@ -138,6 +138,10 @@ class StreamingAsrClient(
                                             resultBuilder.append(text)
                                         }
                                     }
+                                    // Server sends audio_info when processing is complete
+                                    if (json.has("audio_info")) {
+                                        latch.countDown()
+                                    }
                                 } catch (_: Exception) { }
                             }
                         }
