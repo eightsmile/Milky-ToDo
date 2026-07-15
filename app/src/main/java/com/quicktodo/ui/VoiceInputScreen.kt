@@ -63,6 +63,8 @@ fun VoiceInputScreen(
     var isProcessing by remember { mutableStateOf(false) }
     var showReview by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf("") }
+    var wsDebugLog by remember { mutableStateOf("") }
+    var wsRecBytes by remember { mutableIntStateOf(0) }
     var audioFile by remember { mutableStateOf<File?>(null) }
     var mediaRecorder by remember { mutableStateOf<MediaRecorder?>(null) }
     var todoItems by remember { mutableStateOf<List<EditableTodoItem>>(emptyList()) }
@@ -207,6 +209,11 @@ fun VoiceInputScreen(
                         CircularProgressIndicator()
                         Spacer(Modifier.height(16.dp))
                         Text("Transcribing...", color = TextSecondary)
+                        if (wsDebugLog.isNotEmpty()) {
+                            Spacer(Modifier.height(8.dp))
+                            Text(wsDebugLog, fontSize = 11.sp, color = TextSecondary,
+                                modifier = Modifier.padding(horizontal = 24.dp))
+                        }
                         Spacer(Modifier.height(24.dp))
                         TextButton(onClick = { isProcessing = false; errorMessage = "Cancelled" }) {
                             Text("Cancel")
@@ -246,18 +253,22 @@ fun VoiceInputScreen(
 
                                         if (isStreaming) {
                                             // Streaming mode — WebSocket binary protocol
-                                            isProcessing = false  // show recording UI
+                                            wsDebugLog = ""; wsRecBytes = 0
+
                                             isRecording = true
                                             val streamingRecorder = StreamingAudioRecorder(context)
+                                            streamingRecorder.onDebug = { msg -> wsDebugLog += "$msg\n" }
 
                                             val deferred = scope.async(Dispatchers.IO) {
                                                 api.transcribeAudioStream { sender ->
                                                     streamingRecorder.start(
                                                         onChunk = { data, isLast ->
                                                             sender.sendChunk(data, isLast)
+                                                            if (!isLast) wsRecBytes += data.size
                                                         },
                                                         onComplete = { },
                                                         onError = { err ->
+                                                            wsDebugLog += "Rec error: $err\n"
                                                             errorMessage = err
                                                         }
                                                     )
@@ -266,8 +277,18 @@ fun VoiceInputScreen(
 
                                             tryAwaitRelease()
                                             isRecording = false
+                                            val bytesCaptured = wsRecBytes
                                             streamingRecorder.stop()
+
+                                            if (bytesCaptured == 0) {
+                                                deferred.cancel()
+                                                errorMessage = "No Voice Recording"
+                                                wsDebugLog += "No audio captured\n"
+                                                return@detectTapGestures
+                                            }
+
                                             isProcessing = true
+                                            wsDebugLog += "Captured ${bytesCaptured} bytes, waiting server...\n"
 
                                             val result = deferred.await()
                                             if (!result.success) {
