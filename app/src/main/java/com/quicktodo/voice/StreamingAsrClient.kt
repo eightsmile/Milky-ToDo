@@ -134,13 +134,9 @@ class StreamingAsrClient(
                                     if (result != null) {
                                         val text = result.optString("text", "")
                                         if (text.isNotEmpty()) {
-                                            resultBuilder.setLength(0)  // replace, don't append
+                                            resultBuilder.setLength(0)  // replace, keep latest
                                             resultBuilder.append(text)
                                         }
-                                    }
-                                    // Server sends audio_info when processing is complete
-                                    if (json.has("audio_info")) {
-                                        latch.countDown()
                                     }
                                 } catch (_: Exception) { }
                             }
@@ -165,7 +161,7 @@ class StreamingAsrClient(
             }
         })
 
-        latch.await(15, TimeUnit.SECONDS)
+        latch.await(8, TimeUnit.SECONDS)
 
         webSocket?.close(1000, "OK")
         webSocket = null
