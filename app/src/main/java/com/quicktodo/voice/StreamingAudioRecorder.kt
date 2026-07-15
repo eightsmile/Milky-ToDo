@@ -6,11 +6,6 @@ import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
 import androidx.core.content.ContextCompat
-import java.io.File
-import java.io.FileOutputStream
-import java.util.concurrent.CountDownLatch
-import java.util.concurrent.TimeUnit
-import kotlin.math.roundToInt
 
 class StreamingAudioRecorder(private val context: android.content.Context) {
 
@@ -23,8 +18,6 @@ class StreamingAudioRecorder(private val context: android.content.Context) {
     private var audioRecord: AudioRecord? = null
     @Volatile var isRecording = false
         private set
-    val isRunning: Boolean get() = isRecording
-    private var sentFirstChunk = false
     private var chunkCallback: ((ByteArray, Boolean) -> Unit)? = null
 
     fun hasPermission(): Boolean {
@@ -43,22 +36,33 @@ class StreamingAudioRecorder(private val context: android.content.Context) {
             return
         }
 
-        val bufferSize = AudioRecord.getMinBufferSize(
+        val minBuffer = AudioRecord.getMinBufferSize(
             SAMPLE_RATE,
             AudioFormat.CHANNEL_IN_MONO,
             AudioFormat.ENCODING_PCM_16BIT
-        ).coerceAtLeast(CHUNK_SIZE * 2)
-
-        audioRecord = AudioRecord(
-            MediaRecorder.AudioSource.MIC,
-            SAMPLE_RATE,
-            AudioFormat.CHANNEL_IN_MONO,
-            AudioFormat.ENCODING_PCM_16BIT,
-            bufferSize
         )
+        if (minBuffer <= 0) {
+            onError("Sample rate $SAMPLE_RATE not supported")
+            return
+        }
+
+        val bufferSize = minBuffer.coerceAtLeast(CHUNK_SIZE * 2)
+
+        audioRecord = try {
+            AudioRecord(
+                MediaRecorder.AudioSource.VOICE_RECOGNITION,
+                SAMPLE_RATE,
+                AudioFormat.CHANNEL_IN_MONO,
+                AudioFormat.ENCODING_PCM_16BIT,
+                bufferSize
+            )
+        } catch (e: Exception) {
+            onError("AudioRecord failed: ${e.message}")
+            return
+        }
 
         if (audioRecord?.state != AudioRecord.STATE_INITIALIZED) {
-            onError("AudioRecord initialization failed")
+            onError("AudioRecord not initialized (try changing sample rate)")
             return
         }
 
@@ -66,22 +70,21 @@ class StreamingAudioRecorder(private val context: android.content.Context) {
         isRecording = true
         audioRecord?.startRecording()
 
-        // Send first chunk immediately as the last flag needs to be set at the end
-        sentFirstChunk = false
         val buffer = ByteArray(CHUNK_SIZE)
+        var sentFirst = false
+
         try {
             while (isRecording) {
                 val read = audioRecord?.read(buffer, 0, CHUNK_SIZE) ?: -1
                 if (read > 0) {
-                    val chunk = buffer.copyOf(read)
+                    val chunk = if (read == CHUNK_SIZE) buffer else buffer.copyOf(read)
                     onChunk(chunk, false)
-                    sentFirstChunk = true
+                    sentFirst = true
                 } else if (read < 0) {
                     break
                 }
             }
-            // Send empty chunk as last signal
-            if (sentFirstChunk) onChunk(ByteArray(0), true)
+            if (sentFirst) onChunk(ByteArray(0), true)
             onComplete()
         } catch (e: Exception) {
             onError(e.message ?: "Recording error")
@@ -90,26 +93,10 @@ class StreamingAudioRecorder(private val context: android.content.Context) {
         }
     }
 
-    fun startBlocking(onChunk: (ByteArray, Boolean) -> Unit, onError: (String) -> Unit) {
-        val latch = CountDownLatch(1)
-        var errorRef: String? = null
-        start(
-            onChunk = onChunk,
-            onComplete = { latch.countDown() },
-            onError = { errorRef = it; latch.countDown() }
-        )
-        latch.await(60, TimeUnit.SECONDS)
-        if (errorRef != null) onError(errorRef!!)
-    }
-
     fun stop() {
         isRecording = false
-        try {
-            audioRecord?.stop()
-        } catch (_: Exception) { }
-        try {
-            audioRecord?.release()
-        } catch (_: Exception) { }
+        try { audioRecord?.stop() } catch (_: Exception) { }
+        try { audioRecord?.release() } catch (_: Exception) { }
         audioRecord = null
         chunkCallback = null
     }
