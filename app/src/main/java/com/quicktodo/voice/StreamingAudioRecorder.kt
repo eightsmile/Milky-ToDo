@@ -116,6 +116,10 @@ class StreamingAudioRecorder(private val context: android.content.Context) {
         }
     }
 
+    fun signalStop() {
+        isRecording = false
+    }
+
     fun stop() {
         isRecording = false
         try { audioRecord?.stop() } catch (_: Exception) { }

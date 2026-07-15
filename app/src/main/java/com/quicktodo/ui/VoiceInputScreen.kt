@@ -281,7 +281,7 @@ fun VoiceInputScreen(
                                             tryAwaitRelease()
                                             isRecording = false
                                             val bytesCaptured = wsRecBytes
-                                            streamingRecorder.stop()
+                                            streamingRecorder.signalStop()  // only set flag, don't release yet
 
                                             if (bytesCaptured == 0) {
                                                 deferred.cancel()
