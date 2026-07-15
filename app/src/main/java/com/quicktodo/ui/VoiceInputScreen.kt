@@ -306,6 +306,7 @@ fun VoiceInputScreen(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TodoItemEditor(
     item: EditableTodoItem,
