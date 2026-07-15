@@ -24,14 +24,13 @@ class SettingsDataStore(private val context: Context) {
     }
 
     val sttEndpoint: Flow<String> = context.settingsStore.data.map { it[STT_ENDPOINT] ?: "" }
-    val sttApiKey: *** = context.settingsStore.data.map { it[STT_API_KEY] ?: "" }
+    val sttApiKey: Flow<String> = context.settingsStore.data.map { it[STT_API_KEY] ?: "" }
     val sttModel: Flow<String> = context.settingsStore.data.map { it[STT_MODEL] ?: "whisper-1" }
     val sttResourceId: Flow<String> = context.settingsStore.data.map { it[STT_RESOURCE_ID] ?: "" }
     val llmEndpoint: Flow<String> = context.settingsStore.data.map { it[LLM_ENDPOINT] ?: "" }
-    val llmApiKey: *** = context.settingsStore.data.map { it[LLM_API_KEY] ?: "" }
+    val llmApiKey: Flow<String> = context.settingsStore.data.map { it[LLM_API_KEY] ?: "" }
     val llmModel: Flow<String> = context.settingsStore.data.map { it[LLM_MODEL] ?: "deepseek-chat" }
 
-    // Synchronous getters (for widgets etc.)
     fun getSttEndpointSync(): String = runBlocking { sttEndpoint.first() }
     fun getSttApiKeySync(): String = runBlocking { sttApiKey.first() }
     fun getSttModelSync(): String = runBlocking { sttModel.first() }
@@ -40,7 +39,7 @@ class SettingsDataStore(private val context: Context) {
     fun getLlmApiKeySync(): String = runBlocking { llmApiKey.first() }
     fun getLlmModelSync(): String = runBlocking { llmModel.first() }
 
-    suspend fun saveSttSettings(endpoint: String, apiKey: *** model: String, resourceId: String) {
+    suspend fun saveSttSettings(endpoint: String, apiKey: String, model: String, resourceId: String) {
         context.settingsStore.edit { prefs ->
             prefs[STT_ENDPOINT] = endpoint
             prefs[STT_API_KEY] = apiKey
