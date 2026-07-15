@@ -123,20 +123,22 @@ class StreamingAsrClient(
                     MSG_SERVER_RESPONSE -> {
                         // Frame: base_header(4) + seq(4 if flag) + body_size(4) + payload
                         val hasSeq = flags == FLAG_HAS_SEQ || flags == FLAG_LAST_HAS_SEQ
-                        val payloadStart = if (hasSeq) 12 else 8 // 4 header + 4 seq + 4 size, or 4 header + 4 size
+                        val payloadStart = if (hasSeq) 12 else 8
                         if (payloadStart < raw.size) {
                             val payloadStr = raw.copyOfRange(payloadStart, raw.size).toString(Charsets.UTF_8).trim()
                             if (payloadStr.isNotEmpty()) {
                                 try {
                                     val json = JSONObject(payloadStr)
+                                    // Accumulate text from result
                                     val result = json.optJSONObject("result")
                                     if (result != null) {
                                         val text = result.optString("text", "")
                                         if (text.isNotEmpty()) resultBuilder.append(text)
+                                        // Any result response means processing is done
+                                        latch.countDown()
                                     }
-                                    // Complete result
-                                    val code = json.optInt("code", -1)
-                                    if (code == 20000000) {
+                                    // Also handle explicit completion code
+                                    if (json.has("code") && json.optInt("code") == 20000000) {
                                         latch.countDown()
                                     }
                                 } catch (_: Exception) { }
@@ -147,7 +149,6 @@ class StreamingAsrClient(
                         errorMsg = "ASR error: ${bytes.utf8().take(200)}"
                         latch.countDown()
                     }
-                    else -> { /* ignore other types */ }
                 }
             }
 
@@ -157,7 +158,7 @@ class StreamingAsrClient(
             }
 
             override fun onClosed(ws: WebSocket, code: Int, reason: String) {
-                latch.countDown()
+                latch.countDown() // Always release on close
             }
         })
 

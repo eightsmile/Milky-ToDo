@@ -206,7 +206,7 @@ fun VoiceInputScreen(
                     ) {
                         CircularProgressIndicator()
                         Spacer(Modifier.height(16.dp))
-                        Text("Transcribing with Doubao...", color = TextSecondary)
+                        Text("Transcribing...", color = TextSecondary)
                         Spacer(Modifier.height(24.dp))
                         TextButton(onClick = { isProcessing = false; errorMessage = "Cancelled" }) {
                             Text("Cancel")
