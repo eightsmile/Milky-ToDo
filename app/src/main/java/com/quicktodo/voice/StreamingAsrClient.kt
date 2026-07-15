@@ -40,13 +40,9 @@ class StreamingAsrClient(
     }
 
     private fun makeFrame(messageType: Int, flags: Int, payload: ByteArray): ByteArray {
-        val hasSeq = true // always include sequence
-        val headerSize = 4 // base header without seq
-        val totalHeaderSize = if (hasSeq) headerSize + 4 else headerSize // +4 for seq
-
         val frame = ByteArrayOutputStream()
-        // Byte 0: version(4) + header_size(4) in 4-byte units
-        frame.write(((0b0001 shl 4) or (totalHeaderSize / 4)).toInt())
+        // Byte 0: version(4) + header_size(4) in 4-byte units (= 1 for 4 bytes)
+        frame.write(((0b0001 shl 4) or 0b0001).toInt())
         // Byte 1: message_type(4) + flags(4)
         frame.write(((messageType shl 4) or flags).toInt())
         // Byte 2: serialization(4)=JSON(1) + compression(4)=none(0)
@@ -54,17 +50,17 @@ class StreamingAsrClient(
         // Byte 3: reserved
         frame.write(0)
 
-        // Write sequence number (4 bytes, big-endian)
+        // Sequence number (4 bytes, big-endian)
         val seq = if (flags == FLAG_LAST_HAS_SEQ) -(++sequenceNum) else ++sequenceNum
         val seqBytes = ByteBuffer.allocate(4).putInt(seq).array()
         frame.write(seqBytes)
 
-        // Write payload
+        // Body/payload size (4 bytes, big-endian) — required by protocol
+        val sizeBytes = ByteBuffer.allocate(4).putInt(payload.size).array()
+        frame.write(sizeBytes)
+
+        // Payload
         frame.write(payload)
-
-        // Mark config as sent
-        if (messageType == MSG_FULL_REQUEST) configSent.countDown()
-
         return frame.toByteArray()
     }
 
@@ -125,9 +121,9 @@ class StreamingAsrClient(
 
                 when (messageType) {
                     MSG_SERVER_RESPONSE -> {
-                        // Determine payload start: base header(4) + seq(4 if flag says so)
+                        // Frame: base_header(4) + seq(4 if flag) + body_size(4) + payload
                         val hasSeq = flags == FLAG_HAS_SEQ || flags == FLAG_LAST_HAS_SEQ
-                        val payloadStart = if (hasSeq) 8 else 4
+                        val payloadStart = if (hasSeq) 12 else 8 // 4 header + 4 seq + 4 size, or 4 header + 4 size
                         if (payloadStart < raw.size) {
                             val payloadStr = raw.copyOfRange(payloadStart, raw.size).toString(Charsets.UTF_8).trim()
                             if (payloadStr.isNotEmpty()) {
