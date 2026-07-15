@@ -190,7 +190,7 @@ fun SettingsScreen(
                 value = llmModel,
                 onValueChange = { llmModel = it },
                 label = { Text("Model") },
-                placeholder = { Text("deepseek-chat") },
+                placeholder = { Text("deepseek-v4-flash") },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
                 shape = RoundedCornerShape(12.dp)
@@ -206,7 +206,7 @@ fun SettingsScreen(
                 SuggestionChip(
                     onClick = {
                         llmEndpoint = "https://api.deepseek.com/v1/chat/completions"
-                        llmModel = "deepseek-chat"
+                        llmModel = "deepseek-v4-flash"
                     },
                     label = { Text("DeepSeek", fontSize = 11.sp) },
                     shape = RoundedCornerShape(8.dp)

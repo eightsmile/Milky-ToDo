@@ -88,7 +88,7 @@ class ApiService(private val settings: SettingsDataStore) {
             val ak = settings.llmApiKey.first().ifBlank {
                 return LlmResult(false, error = "LLM API key not configured")
             }
-            val md = settings.llmModel.first().ifBlank { "deepseek-chat" }
+            val md = settings.llmModel.first().ifBlank { "deepseek-v4-flash" }
 
             val sysPrompt = "将语音转写为JSON数组，格式：[{\"title\":\"...\",\"date\":\"...\",\"time\":\"...\",\"repeat\":\"DAILY/WEEKLY/MONTHLY/NONE\"}]\n" +
                 "规则：\n" +

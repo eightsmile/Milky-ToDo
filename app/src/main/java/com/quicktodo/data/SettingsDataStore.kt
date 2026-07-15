@@ -29,7 +29,7 @@ class SettingsDataStore(private val context: Context) {
     val sttResourceId: Flow<String> = context.settingsStore.data.map { it[STT_RESOURCE_ID] ?: "" }
     val llmEndpoint: Flow<String> = context.settingsStore.data.map { it[LLM_ENDPOINT] ?: "" }
     val llmApiKey: Flow<String> = context.settingsStore.data.map { it[LLM_API_KEY] ?: "" }
-    val llmModel: Flow<String> = context.settingsStore.data.map { it[LLM_MODEL] ?: "deepseek-chat" }
+    val llmModel: Flow<String> = context.settingsStore.data.map { it[LLM_MODEL] ?: "deepseek-v4-flash" }
 
     fun getSttEndpointSync(): String = runBlocking { sttEndpoint.first() }
     fun getSttApiKeySync(): String = runBlocking { sttApiKey.first() }
