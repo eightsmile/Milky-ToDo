@@ -28,7 +28,6 @@ class StreamingAsrClient(
     private val resultBuilder = StringBuilder()
     private var errorMsg: String? = null
     private var sequenceNum = 0
-    private val configSent = CountDownLatch(1)
 
     companion object {
         const val MSG_FULL_REQUEST = 0b0001
