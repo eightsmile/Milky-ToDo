@@ -63,7 +63,7 @@ class StreamingAsrClient(
         return frame.toByteArray()
     }
 
-    fun transcribe(audioProvider: (ChunkSender) -> Unit): StreamingAsrResult {
+    fun transcribe(audioProvider: (ChunkSender) -> Unit, onDebug: ((String) -> Unit)? = null): StreamingAsrResult {
         val requestId = UUID.randomUUID().toString()
         val latch = CountDownLatch(1)
 
@@ -77,6 +77,7 @@ class StreamingAsrClient(
 
         webSocket = client.newWebSocket(reqBuilder.build(), object : WebSocketListener() {
             override fun onOpen(ws: WebSocket, response: Response) {
+                onDebug?.invoke("WebSocket connected")
                 // Send full client request (JSON config)
                 val config = JSONObject().apply {
                     put("user", JSONObject().apply { put("uid", apiKey.take(15)) })
@@ -95,6 +96,7 @@ class StreamingAsrClient(
                 val payload = config.toString().toByteArray(Charsets.UTF_8)
                 val frame = makeFrame(MSG_FULL_REQUEST, FLAG_HAS_SEQ, payload)
                 ws.send(okio.Buffer().write(frame).snapshot())
+                onDebug?.invoke("Config sent (${payload.size} bytes)")
 
                 // Start audio streaming in background thread
                 Thread {
@@ -153,15 +155,17 @@ class StreamingAsrClient(
 
             override fun onFailure(ws: WebSocket, t: Throwable, response: Response?) {
                 errorMsg = t.message ?: "WebSocket connection failed"
+                onDebug?.invoke("WS failed: $errorMsg")
                 latch.countDown()
             }
 
             override fun onClosed(ws: WebSocket, code: Int, reason: String) {
-                latch.countDown() // Always release on close
+                onDebug?.invoke("WS closed: $code $reason")
+                latch.countDown()
             }
         })
 
-        latch.await(30, TimeUnit.SECONDS)
+        latch.await(15, TimeUnit.SECONDS)
 
         webSocket?.close(1000, "OK")
         webSocket = null

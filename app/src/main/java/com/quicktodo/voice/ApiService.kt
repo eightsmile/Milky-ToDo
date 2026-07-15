@@ -85,7 +85,8 @@ class ApiService(private val settings: SettingsDataStore) {
     }
 
     suspend fun transcribeAudioStream(
-        audioProvider: (StreamingAsrClient.ChunkSender) -> Unit
+        audioProvider: (StreamingAsrClient.ChunkSender) -> Unit,
+        onDebug: ((String) -> Unit)? = null
     ): SttResult {
         val ak = settings.sttApiKey.first()
         if (ak.isBlank()) return SttResult(false, error = "STT API key not configured")
@@ -96,7 +97,7 @@ class ApiService(private val settings: SettingsDataStore) {
 
         return withContext(Dispatchers.IO) {
             val cl = StreamingAsrClient(ak, rid, ep)
-            val result = cl.transcribe(audioProvider)
+            val result = cl.transcribe(audioProvider, onDebug)
             if (result.success) SttResult(true, text = result.text)
             else SttResult(false, error = result.error)
         }

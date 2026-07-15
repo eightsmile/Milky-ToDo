@@ -260,19 +260,22 @@ fun VoiceInputScreen(
                                             streamingRecorder.onDebug = { msg -> wsDebugLog += "$msg\n" }
 
                                             val deferred = scope.async(Dispatchers.IO) {
-                                                api.transcribeAudioStream { sender ->
-                                                    streamingRecorder.start(
-                                                        onChunk = { data, isLast ->
-                                                            sender.sendChunk(data, isLast)
-                                                            if (!isLast) wsRecBytes += data.size
-                                                        },
-                                                        onComplete = { },
-                                                        onError = { err ->
-                                                            wsDebugLog += "Rec error: $err\n"
-                                                            errorMessage = err
-                                                        }
-                                                    )
-                                                }
+                                                api.transcribeAudioStream(
+                                                    audioProvider = { sender ->
+                                                        streamingRecorder.start(
+                                                            onChunk = { data, isLast ->
+                                                                sender.sendChunk(data, isLast)
+                                                                if (!isLast) wsRecBytes += data.size
+                                                            },
+                                                            onComplete = { },
+                                                            onError = { err ->
+                                                                wsDebugLog += "Rec error: $err\n"
+                                                                errorMessage = err
+                                                            }
+                                                        )
+                                                    },
+                                                    onDebug = { msg -> wsDebugLog += "$msg\n" }
+                                                )
                                             }
 
                                             tryAwaitRelease()
