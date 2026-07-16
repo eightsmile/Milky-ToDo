@@ -171,6 +171,17 @@ fun VoiceInputScreen(
                             textStyle = LocalTextStyle.current.copy(fontSize = 13.sp, color = TextSecondary)
                         )
 
+
+                        if (wsDebugLog.isNotEmpty()) {
+                            Spacer(Modifier.height(8.dp))
+                            Text(
+                                "Debug\n$wsDebugLog",
+                                fontSize = 11.sp,
+                                color = TextSecondary,
+                                modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp)
+                            )
+                        }
+
                         Spacer(Modifier.height(12.dp))
 
                         Row(horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -292,6 +303,7 @@ fun VoiceInputScreen(
                                                     val llmStart = System.currentTimeMillis()
                                                     val llm = api.refineText(originalText)
                                                     wsDebugLog += "LLM done in ${System.currentTimeMillis() - llmStart}ms\n"
+                                                    if (!llm.success) wsDebugLog += "LLM failed; using original text\n"
                                                     if (!isProcessing) return@launch
                                                     processLlmResult(llm)
                                                     isProcessing = false
@@ -352,7 +364,10 @@ fun VoiceInputScreen(
                                                     return@launch
                                                 }
                                                 originalText = stt.text
+                                                val llmStart = System.currentTimeMillis()
                                                 val llm = api.refineText(originalText)
+                                                wsDebugLog += "LLM done in ${System.currentTimeMillis() - llmStart}ms\n"
+                                                if (!llm.success) wsDebugLog += "LLM failed; using original text\n"
                                                 if (!isProcessing) return@launch
                                                 processLlmResult(llm)
                                                 isProcessing = false

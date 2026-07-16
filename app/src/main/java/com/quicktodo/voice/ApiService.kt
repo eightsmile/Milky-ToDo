@@ -158,7 +158,7 @@ class ApiService(private val settings: SettingsDataStore) {
             }
             val rb = JSONObject().apply {
                 put("model", md); put("messages", msgs)
-                put("max_tokens", 200); put("temperature", 0.1)
+                put("max_tokens", 300); put("temperature", 0.1)
             }
             val rq = Request.Builder()
                 .url(ep).header("Authorization", "Bearer $ak")
@@ -180,11 +180,28 @@ class ApiService(private val settings: SettingsDataStore) {
 
             if (content.isBlank()) return LlmResult(false, error = "LLM empty")
 
-            // Strip markdown code blocks if present
+            // Strip markdown code blocks if present, then try to extract the JSON array/object
+            // even if the model adds prose around it. If parsing still fails, fall back to raw ASR text.
             val cleanContent = content
                 .replace(Regex("```json\\s*", RegexOption.IGNORE_CASE), "")
                 .replace(Regex("```\\s*$", RegexOption.MULTILINE), "")
                 .trim()
+
+            fun extractJsonCandidate(text: String): String {
+                val arrayStart = text.indexOf('[')
+                val arrayEnd = text.lastIndexOf(']')
+                if (arrayStart >= 0 && arrayEnd > arrayStart) {
+                    return text.substring(arrayStart, arrayEnd + 1).trim()
+                }
+                val objectStart = text.indexOf('{')
+                val objectEnd = text.lastIndexOf('}')
+                if (objectStart >= 0 && objectEnd > objectStart) {
+                    return text.substring(objectStart, objectEnd + 1).trim()
+                }
+                return text
+            }
+
+            val jsonCandidate = extractJsonCandidate(cleanContent)
 
             fun parseItem(obj: JSONObject): LlmTodoItem {
                 val title = obj.optString("title", "").trim()
@@ -230,7 +247,7 @@ class ApiService(private val settings: SettingsDataStore) {
             }
 
             // Try JSONArray first (new format)
-            val array = try { JSONArray(cleanContent) } catch (_: Exception) { null }
+            val array = try { JSONArray(jsonCandidate) } catch (_: Exception) { null }
             if (array != null && array.length() > 0) {
                 val items = mutableListOf<LlmTodoItem>()
                 for (i in 0 until array.length()) {
@@ -251,7 +268,7 @@ class ApiService(private val settings: SettingsDataStore) {
             }
 
             // Fallback: try single JSON object
-            val json = try { JSONObject(cleanContent) } catch (_: Exception) { null }
+            val json = try { JSONObject(jsonCandidate) } catch (_: Exception) { null }
             if (json != null) {
                 val item = parseItem(json)
                 if (item.title.isNotBlank()) {
@@ -260,10 +277,14 @@ class ApiService(private val settings: SettingsDataStore) {
                 }
             }
 
-            // Plain text fallback: take first meaningful line, skip garbage
-            val clean = cleanContent.trim().replace(Regex("^[\\[\\]{}()\"'\\s,]+|[\\[\\]{}()\"'\\s,]+$\""), "").trim()
-            val firstLine = clean.lines().firstOrNull { it.isNotBlank() && it.length > 1 } ?: content
-            return LlmResult(true, text = firstLine)
+            // Plain text fallback: never surface malformed JSON fragments like "[" as the review title.
+            // If the model fails to return valid JSON, use the ASR text itself as the todo title.
+            val fallbackTitle = rawText.trim().ifBlank {
+                cleanContent.trim()
+                    .replace(Regex("^[\\[\\]{}()\"'\\s,]+|[\\[\\]{}()\"'\\s,]+$"), "")
+                    .trim()
+            }
+            return LlmResult(true, text = fallbackTitle.ifBlank { rawText })
         } catch (e: Exception) {
             return LlmResult(false, error = "LLM failed: ${e.localizedMessage ?: "Unknown"}")
         }
