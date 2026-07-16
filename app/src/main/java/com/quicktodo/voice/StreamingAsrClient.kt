@@ -7,7 +7,10 @@ import java.io.ByteArrayOutputStream
 import java.nio.ByteBuffer
 import java.util.UUID
 import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
+import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 
 data class StreamingAsrResult(
     val success: Boolean,
@@ -67,6 +70,30 @@ class StreamingAsrClient(
     fun transcribe(audioProvider: (ChunkSender) -> Unit, onDebug: ((String) -> Unit)? = null): StreamingAsrResult {
         val requestId = UUID.randomUUID().toString()
         val latch = CountDownLatch(1)
+        val completionSignaled = AtomicBoolean(false)
+        val scheduler = Executors.newSingleThreadScheduledExecutor()
+        var completionFuture: ScheduledFuture<*>? = null
+
+        fun signalCompletion(delayMs: Long, reason: String) {
+            if (completionSignaled.get()) return
+            synchronized(latch) {
+                completionFuture?.cancel(false)
+                completionFuture = scheduler.schedule({
+                    val hasText = resultBuilder.toString().trim().isNotEmpty()
+                    if (hasText && completionSignaled.compareAndSet(false, true)) {
+                        onDebug?.invoke("WS result stable ($reason)")
+                        latch.countDown()
+                    }
+                }, delayMs, TimeUnit.MILLISECONDS)
+            }
+        }
+
+        fun countDownNow(reason: String) {
+            if (completionSignaled.compareAndSet(false, true)) {
+                onDebug?.invoke(reason)
+                latch.countDown()
+            }
+        }
 
         val reqBuilder = Request.Builder()
             .url(endpoint)
@@ -111,6 +138,7 @@ class StreamingAsrClient(
                         })
                     } catch (e: Exception) {
                         errorMsg = e.message ?: "Audio streaming error"
+                        countDownNow("Audio streaming failed")
                     }
                 }.start()
             }
@@ -136,7 +164,12 @@ class StreamingAsrClient(
                                         if (text.isNotEmpty()) {
                                             resultBuilder.setLength(0)  // replace, keep latest
                                             resultBuilder.append(text)
+                                            onDebug?.invoke("WS text update (${text.length} chars)")
+                                            signalCompletion(600, "text idle")
                                         }
+                                    }
+                                    if (json.has("audio_info") && resultBuilder.toString().trim().isNotEmpty()) {
+                                        signalCompletion(120, "audio_info")
                                     }
                                 } catch (_: Exception) { }
                             }
@@ -144,7 +177,7 @@ class StreamingAsrClient(
                     }
                     MSG_ERROR -> {
                         errorMsg = "ASR error: ${bytes.utf8().take(200)}"
-                        latch.countDown()
+                        countDownNow("WS error")
                     }
                 }
             }
@@ -152,16 +185,18 @@ class StreamingAsrClient(
             override fun onFailure(ws: WebSocket, t: Throwable, response: Response?) {
                 errorMsg = t.message ?: "WebSocket connection failed"
                 onDebug?.invoke("WS failed: $errorMsg")
-                latch.countDown()
+                countDownNow("WS failure")
             }
 
             override fun onClosed(ws: WebSocket, code: Int, reason: String) {
                 onDebug?.invoke("WS closed: $code $reason")
-                latch.countDown()
+                countDownNow("WS closed")
             }
         })
 
-        latch.await(8, TimeUnit.SECONDS)
+        val completed = latch.await(5, TimeUnit.SECONDS)
+        if (!completed) onDebug?.invoke("WS wait timeout")
+        scheduler.shutdownNow()
 
         webSocket?.close(1000, "OK")
         webSocket = null

@@ -274,9 +274,13 @@ fun VoiceInputScreen(
                                             processingJob = scope.launch {
                                                 val api = ApiService(settings)
                                                 wsDebugLog += "Sending to WS...\n"
+                                                val asrStart = System.currentTimeMillis()
                                                 val result = withContext(Dispatchers.IO) {
-                                                    api.transcribePcmBatch(pcmData)
+                                                    api.transcribePcmBatch(pcmData) { msg ->
+                                                        wsDebugLog += "$msg\n"
+                                                    }
                                                 }
+                                                wsDebugLog += "ASR done in ${System.currentTimeMillis() - asrStart}ms\n"
                                                 if (!isProcessing) return@launch
                                                 if (!result.success) {
                                                     errorMessage = result.error
@@ -285,7 +289,9 @@ fun VoiceInputScreen(
                                                 } else {
                                                     wsDebugLog += "Server response OK\n"
                                                     originalText = result.text
+                                                    val llmStart = System.currentTimeMillis()
                                                     val llm = api.refineText(originalText)
+                                                    wsDebugLog += "LLM done in ${System.currentTimeMillis() - llmStart}ms\n"
                                                     if (!isProcessing) return@launch
                                                     processLlmResult(llm)
                                                     isProcessing = false

@@ -91,7 +91,10 @@ class ApiService(private val settings: SettingsDataStore) {
         }
     }
 
-    suspend fun transcribePcmBatch(pcmData: ByteArray): SttResult {
+    suspend fun transcribePcmBatch(
+        pcmData: ByteArray,
+        onDebug: ((String) -> Unit)? = null
+    ): SttResult {
         return transcribeAudioStream(
             audioProvider = { sender ->
                 // Send all PCM data in 200ms chunks
@@ -106,7 +109,7 @@ class ApiService(private val settings: SettingsDataStore) {
                 // Always send last packet
                 sender.sendChunk(ByteArray(0), true)
             },
-            onDebug = null
+            onDebug = onDebug
         )
     }
 
