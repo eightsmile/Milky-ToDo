@@ -1,6 +1,7 @@
 package com.quicktodo.voice
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.content.pm.PackageManager
 import android.media.AudioFormat
 import android.media.AudioRecord
@@ -17,6 +18,7 @@ class PcmRecorder(private val context: android.content.Context) {
     }
 
     private var audioRecord: AudioRecord? = null
+    private var recordingThread: Thread? = null
     @Volatile var isRecording = false
         private set
     private val buffer = ByteArrayOutputStream()
@@ -72,7 +74,7 @@ class PcmRecorder(private val context: android.content.Context) {
         onDebug?.invoke("PCM: recording at $SAMPLE_RATE Hz")
 
         // Read in background thread to avoid blocking
-        Thread({
+        recordingThread = Thread({
             val shortBuf = ShortArray(bufferSize / 2)
             val byteBuf = ByteBuffer.allocate(bufferSize)
             byteBuf.order(ByteOrder.LITTLE_ENDIAN)
@@ -86,13 +88,16 @@ class PcmRecorder(private val context: android.content.Context) {
                         byteShortBuf.clear()
                         byteShortBuf.put(shortBuf, 0, read)
                         byteBuf.position(0)
-                        buffer.write(byteBuf.array(), 0, read * 2)
+                        synchronized(buffer) {
+                            buffer.write(byteBuf.array(), 0, read * 2)
+                        }
                     } else if (read < 0) break
                 }
             } catch (_: Exception) { }
-        }, "PcmRecorder").start()
+        }, "PcmRecorder").also { it.start() }
     }
 
+    @SuppressLint("MissingPermission")
     private fun createAudioRecord(source: Int, bufferSize: Int): AudioRecord {
         return AudioRecord(
             source,
@@ -106,8 +111,10 @@ class PcmRecorder(private val context: android.content.Context) {
     fun signalStop(): ByteArray {
         isRecording = false
         try { audioRecord?.stop() } catch (_: Exception) { }
+        try { recordingThread?.join(300) } catch (_: Exception) { }
         try { audioRecord?.release() } catch (_: Exception) { }
+        recordingThread = null
         audioRecord = null
-        return buffer.toByteArray()
+        return synchronized(buffer) { buffer.toByteArray() }
     }
 }

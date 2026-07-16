@@ -13,7 +13,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -21,6 +20,8 @@ import com.quicktodo.QuickTodoApp
 import com.quicktodo.data.TodoEntity
 import com.quicktodo.ui.theme.TextSecondary
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -46,7 +47,9 @@ fun ArchiveScreen(
                     if (syncer.isVaultValid() && archivedTodos.isNotEmpty()) {
                         IconButton(onClick = {
                             scope.launch {
-                                val errors = syncer.syncAllArchived(archivedTodos)
+                                val errors = withContext(Dispatchers.IO) {
+                                    syncer.syncAllArchived(archivedTodos)
+                                }
                                 syncStatus = if (errors.isEmpty()) "Synced \u2713" else "Errors: ${errors.size}"
                             }
                         }) {

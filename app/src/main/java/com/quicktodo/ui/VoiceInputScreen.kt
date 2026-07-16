@@ -30,10 +30,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
-import com.quicktodo.QuickTodoApp
 import com.quicktodo.ui.theme.TextSecondary
 import com.quicktodo.voice.ApiService
-import com.quicktodo.voice.LlmTodoItem
 import com.quicktodo.voice.PcmRecorder
 import java.io.File
 import java.text.SimpleDateFormat
@@ -41,14 +39,15 @@ import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.async
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.Job
 
 data class EditableTodoItem(
     val title: String,
     var dueDate: Long?,
-    var repeatInterval: String
+    var repeatInterval: String,
+    val id: Long = System.nanoTime()
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -64,12 +63,13 @@ fun VoiceInputScreen(
     var showReview by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf("") }
     var wsDebugLog by remember { mutableStateOf("") }
-    var wsRecBytes by remember { mutableIntStateOf(0) }
     var audioFile by remember { mutableStateOf<File?>(null) }
+    var processingJob by remember { mutableStateOf<Job?>(null) }
     var mediaRecorder by remember { mutableStateOf<MediaRecorder?>(null) }
     var todoItems by remember { mutableStateOf<List<EditableTodoItem>>(emptyList()) }
     var originalText by remember { mutableStateOf("") }
     val scope = rememberCoroutineScope()
+    val settings = settingsProvider()
 
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
@@ -78,26 +78,12 @@ fun VoiceInputScreen(
     }
 
     // Helper to process LLM result into todoItems
-    fun applyTimeToDate(dueDate: Long?, timeStr: String): Long? {
-        if (dueDate == null || timeStr.isBlank() || timeStr.equals("none", true)) return dueDate
-        val parts = timeStr.split(":")
-        if (parts.size != 2) return dueDate
-        return try {
-            val cal = Calendar.getInstance().apply { timeInMillis = dueDate }
-            cal.set(Calendar.HOUR_OF_DAY, parts[0].toInt())
-            cal.set(Calendar.MINUTE, parts[1].toInt())
-            cal.set(Calendar.SECOND, 0)
-            cal.set(Calendar.MILLISECOND, 0)
-            cal.timeInMillis
-        } catch (_: Exception) { dueDate }
-    }
-
     fun processLlmResult(llm: com.quicktodo.voice.LlmResult) {
         if (llm.items != null && llm.items.size > 1) {
             todoItems = llm.items.map {
                 EditableTodoItem(
                     title = it.title,
-                    dueDate = applyTimeToDate(it.dueDate, ""),
+                    dueDate = it.dueDate,
                     repeatInterval = it.repeatInterval
                 )
             }
@@ -118,7 +104,11 @@ fun VoiceInputScreen(
     ), label = "pulseScale")
 
     DisposableEffect(Unit) {
-        onDispose { mediaRecorder?.release(); audioFile?.delete() }
+        onDispose {
+            processingJob?.cancel()
+            mediaRecorder?.release()
+            audioFile?.delete()
+        }
     }
 
 
@@ -149,7 +139,7 @@ fun VoiceInputScreen(
                             modifier = Modifier.weight(1f),
                             verticalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
-                            itemsIndexed(todoItems) { index, _ ->
+                            itemsIndexed(todoItems, key = { _, item -> item.id }) { index, _ ->
                                 TodoItemEditor(
                                     item = todoItems[index],
                                     onUpdate = { updated ->
@@ -215,7 +205,11 @@ fun VoiceInputScreen(
                                 modifier = Modifier.padding(horizontal = 24.dp))
                         }
                         Spacer(Modifier.height(24.dp))
-                        TextButton(onClick = { isProcessing = false; errorMessage = "Cancelled" }) {
+                        TextButton(onClick = {
+                            processingJob?.cancel()
+                            isProcessing = false
+                            errorMessage = "Cancelled"
+                        }) {
                             Text("Cancel")
                         }
                     }
@@ -248,12 +242,12 @@ fun VoiceInputScreen(
                                         errorMessage = ""
 
                                         // Check mode first
-                                        val api = ApiService(QuickTodoApp.instance.settingsDataStore)
+                                        val api = ApiService(settings)
                                         val isStreaming = api.isStreamingMode()
 
                                         if (isStreaming) {
                                             // WS mode: record full PCM, then send via WebSocket
-                                            wsDebugLog = ""; wsRecBytes = 0
+                                            wsDebugLog = ""
                                             isRecording = true
 
                                             // Record PCM
@@ -267,8 +261,6 @@ fun VoiceInputScreen(
                                             tryAwaitRelease()
                                             isRecording = false
                                             val pcmData = recorder.signalStop()
-                                            wsRecBytes = pcmData.size
-
                                             if (pcmData.isEmpty()) {
                                                 errorMessage = "No Voice Recording"
                                                 wsDebugLog += "No audio captured\n"
@@ -279,12 +271,13 @@ fun VoiceInputScreen(
                                             wsDebugLog += "Recorded ${pcmData.size} bytes\n"
                                             wsDebugLog += "Sending via WebSocket...\n"
 
-                                            scope.launch {
-                                                val api = ApiService(QuickTodoApp.instance.settingsDataStore)
+                                            processingJob = scope.launch {
+                                                val api = ApiService(settings)
                                                 wsDebugLog += "Sending to WS...\n"
                                                 val result = withContext(Dispatchers.IO) {
                                                     api.transcribePcmBatch(pcmData)
                                                 }
+                                                if (!isProcessing) return@launch
                                                 if (!result.success) {
                                                     errorMessage = result.error
                                                     wsDebugLog += "Error: ${result.error}\n"
@@ -293,6 +286,7 @@ fun VoiceInputScreen(
                                                     wsDebugLog += "Server response OK\n"
                                                     originalText = result.text
                                                     val llm = api.refineText(originalText)
+                                                    if (!isProcessing) return@launch
                                                     processLlmResult(llm)
                                                     isProcessing = false
                                                     showReview = true
@@ -304,7 +298,12 @@ fun VoiceInputScreen(
                                         // Flash mode: use MediaRecorder
                                         val file = File.createTempFile("voice", ".m4a", context.cacheDir)
                                         audioFile = file
-                                        val rec = if (Build.VERSION.SDK_INT >= 31) MediaRecorder(context) else MediaRecorder()
+                                        val rec = if (Build.VERSION.SDK_INT >= 31) {
+                                            MediaRecorder(context)
+                                        } else {
+                                            @Suppress("DEPRECATION")
+                                            MediaRecorder()
+                                        }
                                         rec.setAudioSource(MediaRecorder.AudioSource.MIC)
                                         rec.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
                                         rec.setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
@@ -336,19 +335,26 @@ fun VoiceInputScreen(
                                         rec.release()
                                         mediaRecorder = null
 
-                                        scope.launch {
-                                            val api = ApiService(QuickTodoApp.instance.settingsDataStore)
-                                            val stt = api.transcribeAudio(file)
-                                            if (!stt.success) {
-                                                errorMessage = stt.error
+                                        processingJob = scope.launch {
+                                            try {
+                                                val api = ApiService(settings)
+                                                val stt = api.transcribeAudio(file)
+                                                if (!isProcessing) return@launch
+                                                if (!stt.success) {
+                                                    errorMessage = stt.error
+                                                    isProcessing = false
+                                                    return@launch
+                                                }
+                                                originalText = stt.text
+                                                val llm = api.refineText(originalText)
+                                                if (!isProcessing) return@launch
+                                                processLlmResult(llm)
                                                 isProcessing = false
-                                                return@launch
+                                                showReview = true
+                                            } finally {
+                                                file.delete()
+                                                if (audioFile == file) audioFile = null
                                             }
-                                            originalText = stt.text
-                                            val llm = api.refineText(originalText)
-                                            processLlmResult(llm)
-                                            isProcessing = false
-                                            showReview = true
                                         }  // close scope.launch
                                     })  // close onPress + detectTapGestures
                                 },
@@ -556,13 +562,3 @@ fun TodoItemEditor(
         }
     }
 }
-
-private fun EditableTodoItem.copy(
-    title: String? = null,
-    dueDate: Long? = null,
-    repeatInterval: String? = null
-) = EditableTodoItem(
-    title = title ?: this.title,
-    dueDate = dueDate ?: this.dueDate,
-    repeatInterval = repeatInterval ?: this.repeatInterval
-)

@@ -13,8 +13,8 @@ android {
         applicationId = "com.quicktodo"
         minSdk = 26
         targetSdk = 34
-        versionCode = 4
-        versionName = "1.3"
+        versionCode = 5
+        versionName = "1.4"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -66,8 +66,6 @@ dependencies {
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-extended")
 
-    // Navigation
-    implementation("androidx.navigation:navigation-compose:2.7.7")
 
     // ViewModel
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.3")
@@ -81,14 +79,12 @@ dependencies {
     // DataStore (for settings)
     implementation("androidx.datastore:datastore-preferences:1.1.1")
 
-    // OkHttp + Retrofit (for API calls)
+    // OkHttp (for API calls)
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
-    implementation("com.squareup.retrofit2:retrofit:2.11.0")
-    implementation("com.squareup.retrofit2:converter-gson:2.11.0")
-    implementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
 
-    // Gson
-    implementation("com.google.code.gson:gson:2.11.0")
+    // Tests
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.1")
 
     // Debug
     debugImplementation("androidx.compose.ui:ui-tooling")

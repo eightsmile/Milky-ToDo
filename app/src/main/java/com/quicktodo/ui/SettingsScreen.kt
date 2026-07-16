@@ -21,7 +21,7 @@ import androidx.compose.foundation.layout.Arrangement
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
-    settings: com.quicktodo.data.SettingsDataStore,
+    settings: SettingsDataStore,
     onBack: () -> Unit
 ) {
     var sttEndpoint by remember { mutableStateOf("") }
@@ -75,7 +75,7 @@ fun SettingsScreen(
                 modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)
             )
             Text(
-                text = "Voice recording → text transcription",
+                text = "Voice recording → Doubao/Volcengine speech transcription",
                 fontSize = 12.sp,
                 color = TextSecondary,
                 modifier = Modifier.padding(bottom = 12.dp)
@@ -85,7 +85,7 @@ fun SettingsScreen(
                 value = sttEndpoint,
                 onValueChange = { sttEndpoint = it },
                 label = { Text("Endpoint URL") },
-                placeholder = { Text("https://api.openai.com/v1/audio/transcriptions") },
+                placeholder = { Text("https://openspeech.bytedance.com/api/v3/auc/bigmodel/recognize/flash") },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
                 shape = RoundedCornerShape(12.dp)
@@ -107,7 +107,7 @@ fun SettingsScreen(
                 value = sttModel,
                 onValueChange = { sttModel = it },
                 label = { Text("Model") },
-                placeholder = { Text("whisper-1") },
+                placeholder = { Text("bigmodel") },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
                 shape = RoundedCornerShape(12.dp)
@@ -143,15 +143,7 @@ fun SettingsScreen(
                 )
                 SuggestionChip(
                     onClick = {
-                        sttEndpoint = "https://api.openai.com/v1/audio/transcriptions"
-                        sttModel = "whisper-1"
-                    },
-                    label = { Text("OpenAI Whisper", fontSize = 11.sp) },
-                    shape = RoundedCornerShape(8.dp)
-                )
-                SuggestionChip(
-                    onClick = {
-                        sttEndpoint = "wss://openspeech.bytedance.com/api/v3/sauc/bigmodel_async"
+                        sttEndpoint = "wss://openspeech.bytedance.com/api/v3/sauc/bigmodel"
                         sttModel = "bigmodel"
                         sttResourceId = "volc.seedasr.sauc.duration"
                         sttMode = "streaming"
@@ -242,35 +234,6 @@ fun SettingsScreen(
                 )
             }
 
-            // Export section
-            HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
-
-            Text(
-                text = "Data Management",
-                fontWeight = FontWeight.SemiBold,
-                fontSize = 16.sp,
-                modifier = Modifier.padding(bottom = 12.dp)
-            )
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                OutlinedButton(
-                    onClick = { /* TODO: export */ },
-                    modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Text("Export")
-                }
-                OutlinedButton(
-                    onClick = { /* TODO: import */ },
-                    modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Text("Import")
-                }
-            }
 
             // Obsidian (future)
             HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))

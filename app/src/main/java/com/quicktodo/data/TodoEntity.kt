@@ -1,9 +1,17 @@
 package com.quicktodo.data
 
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.PrimaryKey
 
-@Entity(tableName = "todos")
+@Entity(
+    tableName = "todos",
+    indices = [
+        Index(value = ["isArchived", "dueDate", "createdAt"]),
+        Index(value = ["isArchived", "completedAt"]),
+        Index(value = ["isDone", "isArchived"])
+    ]
+)
 data class TodoEntity(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0,

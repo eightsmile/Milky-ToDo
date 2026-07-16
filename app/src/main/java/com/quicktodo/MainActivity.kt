@@ -11,7 +11,6 @@ import com.quicktodo.ui.SettingsScreen
 import com.quicktodo.ui.TodoScreen
 import com.quicktodo.ui.TodoViewModel
 import com.quicktodo.ui.VoiceInputScreen
-import com.quicktodo.ui.EditableTodoItem
 import androidx.lifecycle.viewmodel.compose.viewModel
 
 enum class Screen {
@@ -46,7 +45,7 @@ class MainActivity : ComponentActivity() {
                         onAddTodo = { title, dueDate, repeat ->
                             viewModel.addTodo(title, dueDate, repeat)
                         },
-                        onToggle = { id, done -> viewModel.toggleTodo(id, done) },
+                        onToggle = { id -> viewModel.toggleTodo(id) },
                         onDelete = { viewModel.deleteTodo(it) },
                         onUpdateTodo = { id, title, dueDate, repeat -> viewModel.updateTodo(id, title, dueDate, repeat) },
                         onArchiveCompleted = { viewModel.archiveCompleted() },

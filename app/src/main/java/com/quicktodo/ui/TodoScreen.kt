@@ -25,17 +25,18 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.quicktodo.data.TodoEntity
 import com.quicktodo.ui.theme.CheckedColor
 import com.quicktodo.ui.theme.TextSecondary
+import com.quicktodo.util.mergeDateWithExistingTime
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
+
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
@@ -43,7 +44,7 @@ fun TodoScreen(
     todos: List<TodoEntity>,
     activeCount: Int,
     onAddTodo: (String, Long?, String) -> Unit,
-    onToggle: (Long, Boolean) -> Unit,
+    onToggle: (Long) -> Unit,
     onDelete: (TodoEntity) -> Unit,
     onUpdateTodo: (Long, String, Long?, String) -> Unit,
     onArchiveCompleted: () -> Unit,
@@ -62,10 +63,6 @@ fun TodoScreen(
     val scope = rememberCoroutineScope()
     val dateFormat = remember { SimpleDateFormat("MMM dd, yyyy", Locale.getDefault()) }
     val timeFormat = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
-
-    val datePickerState = rememberDatePickerState(
-        initialSelectedDateMillis = pendingDueDate
-    )
 
     Scaffold(
         topBar = {
@@ -147,7 +144,7 @@ fun TodoScreen(
                                 todo = todo,
                                 isEditing = editingTodoId == todo.id,
                                 editText = if (editingTodoId == todo.id) editingText else todo.title,
-                                onToggle = { onToggle(todo.id, todo.isDone) },
+                                onToggle = { onToggle(todo.id) },
                                 onEdit = {
                                     editingTodoId = todo.id
                                     editingText = todo.title
@@ -383,11 +380,16 @@ fun TodoScreen(
 
     // Date picker dialog
     if (showDatePicker) {
+        val datePickerState = rememberDatePickerState(
+            initialSelectedDateMillis = pendingDueDate ?: System.currentTimeMillis()
+        )
         DatePickerDialog(
             onDismissRequest = { showDatePicker = false },
             confirmButton = {
                 TextButton(onClick = {
-                    pendingDueDate = datePickerState.selectedDateMillis
+                    datePickerState.selectedDateMillis?.let { ms ->
+                        pendingDueDate = mergeDateWithExistingTime(ms, pendingDueDate)
+                    }
                     showDatePicker = false
                 }) { Text("OK") }
             },
@@ -493,9 +495,6 @@ fun TodoItem(
             var editRepeat by remember { mutableStateOf(todo.repeatInterval) }
             var showDatePicker by remember { mutableStateOf(false) }
             var showTimePicker by remember { mutableStateOf(false) }
-            val datePickerState = rememberDatePickerState(
-                initialSelectedDateMillis = editDueDate ?: System.currentTimeMillis()
-            )
 
             Row(
                 modifier = Modifier.weight(1f),
@@ -587,11 +586,16 @@ fun TodoItem(
 
             // Date picker dialog
             if (showDatePicker) {
+                val datePickerState = rememberDatePickerState(
+                    initialSelectedDateMillis = editDueDate ?: System.currentTimeMillis()
+                )
                 DatePickerDialog(
                     onDismissRequest = { showDatePicker = false },
                     confirmButton = {
                         TextButton(onClick = {
-                            editDueDate = datePickerState.selectedDateMillis
+                            datePickerState.selectedDateMillis?.let { ms ->
+                                editDueDate = mergeDateWithExistingTime(ms, editDueDate)
+                            }
                             showDatePicker = false
                         }) { Text("OK") }
                     },

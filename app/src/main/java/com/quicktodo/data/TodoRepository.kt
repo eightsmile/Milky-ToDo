@@ -6,7 +6,6 @@ import java.util.Calendar
 class TodoRepository(private val todoDao: TodoDao) {
 
     val allActiveTodos: Flow<List<TodoEntity>> = todoDao.getAllActive()
-    val activeTodos: Flow<List<TodoEntity>> = todoDao.getActiveTodos()
     val archivedTodos: Flow<List<TodoEntity>> = todoDao.getArchivedTodos()
 
     suspend fun add(title: String, dueDate: Long? = null, repeatInterval: String = "NONE"): Long {
@@ -25,15 +24,15 @@ class TodoRepository(private val todoDao: TodoDao) {
         )
     }
 
-    suspend fun toggle(id: Long, currentDone: Boolean) {
-        if (currentDone) {
+    suspend fun toggle(id: Long) {
+        val todo = todoDao.getTodoById(id) ?: return
+        if (todo.isDone) {
             todoDao.setDone(id, false, null)
         } else {
             val now = System.currentTimeMillis()
             todoDao.setDone(id, true, now)
 
-            val todo = todoDao.getTodoById(id)
-            if (todo != null && todo.repeatInterval != "NONE") {
+            if (todo.repeatInterval != "NONE") {
                 val nextDueDate = calculateNextDueDate(todo.dueDate ?: now, todo.repeatInterval)
                 todoDao.insert(
                     TodoEntity(
@@ -62,11 +61,16 @@ class TodoRepository(private val todoDao: TodoDao) {
         todoDao.delete(todo)
     }
 
-    suspend fun updateTitle(id: Long, newTitle: String) {
-        val todo = todoDao.getTodoById(id)
-        if (todo != null) {
-            todoDao.update(todo.copy(title = newTitle.trim()))
-        }
+
+    suspend fun updateTodo(id: Long, title: String, dueDate: Long?, repeatInterval: String) {
+        val todo = todoDao.getTodoById(id) ?: return
+        todoDao.update(
+            todo.copy(
+                title = title.trim(),
+                dueDate = dueDate,
+                repeatInterval = repeatInterval
+            )
+        )
     }
 
     private fun calculateNextDueDate(currentDueDate: Long, interval: String): Long {

@@ -17,7 +17,6 @@ class TodoViewModel(application: Application) : AndroidViewModel(application) {
     private val appContext = application
 
     val allActiveTodos: Flow<List<TodoEntity>>
-    val activeTodos: Flow<List<TodoEntity>>
     val archivedTodos: Flow<List<TodoEntity>>
     val activeTodoCount: Flow<Int>
 
@@ -25,9 +24,8 @@ class TodoViewModel(application: Application) : AndroidViewModel(application) {
         val dao = AppDatabase.getInstance(appContext).todoDao()
         repository = TodoRepository(dao)
         allActiveTodos = repository.allActiveTodos
-        activeTodos = repository.activeTodos
         archivedTodos = repository.archivedTodos
-        activeTodoCount = repository.activeTodos.map { it.size }
+        activeTodoCount = repository.allActiveTodos.map { todos -> todos.count { !it.isDone } }
     }
 
     private fun refreshWidget() {
@@ -42,9 +40,9 @@ class TodoViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun toggleTodo(id: Long, currentDone: Boolean) {
+    fun toggleTodo(id: Long) {
         viewModelScope.launch {
-            repository.toggle(id, currentDone)
+            repository.toggle(id)
             refreshWidget()
         }
     }
@@ -72,12 +70,7 @@ class TodoViewModel(application: Application) : AndroidViewModel(application) {
 
     fun updateTodo(id: Long, title: String, dueDate: Long?, repeat: String) {
         viewModelScope.launch {
-            val todo = com.quicktodo.data.AppDatabase.getInstance(appContext).todoDao().getTodoById(id)
-            if (todo != null) {
-                com.quicktodo.data.AppDatabase.getInstance(appContext).todoDao().update(
-                    todo.copy(title = title.trim(), dueDate = dueDate, repeatInterval = repeat)
-                )
-            }
+            repository.updateTodo(id, title, dueDate, repeat)
             refreshWidget()
         }
     }

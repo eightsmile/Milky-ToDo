@@ -2,6 +2,7 @@ package com.quicktodo.voice
 
 import android.util.Base64
 import com.quicktodo.data.SettingsDataStore
+import com.quicktodo.util.parseChineseDate
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
@@ -61,8 +62,11 @@ class ApiService(private val settings: SettingsDataStore) {
                 })
             }
 
+            val ep = settings.sttEndpoint.first().ifBlank {
+                "https://openspeech.bytedance.com/api/v3/auc/bigmodel/recognize/flash"
+            }
             val req = Request.Builder()
-                .url("https://openspeech.bytedance.com/api/v3/auc/bigmodel/recognize/flash")
+                .url(ep)
                 .header("X-Api-Key", ak)
                 .header("X-Api-Resource-Id", rid)
                 .header("X-Api-Request-Id", UUID.randomUUID().toString())
@@ -71,14 +75,17 @@ class ApiService(private val settings: SettingsDataStore) {
                 .post(body.toString().toRequestBody(jsonMt))
                 .build()
 
-            val resp = withContext(Dispatchers.IO) { client.newCall(req).execute() }
-            val respBody = resp.body?.string() ?: ""
-            if (!resp.isSuccessful) return SttResult(false, error = "ASR (${resp.code}): ${respBody.take(300)}")
+            return withContext(Dispatchers.IO) {
+                client.newCall(req).execute().use { resp ->
+                    val respBody = resp.body?.string() ?: ""
+                    if (!resp.isSuccessful) return@withContext SttResult(false, error = "ASR (${resp.code}): ${respBody.take(300)}")
 
-            val json = JSONObject(respBody)
-            val text = json.optJSONObject("result")?.optString("text", "")?.trim() ?: ""
-            if (text.isBlank()) return SttResult(false, error = "No Voice Input")
-            return SttResult(true, text = text)
+                    val json = JSONObject(respBody)
+                    val text = json.optJSONObject("result")?.optString("text", "")?.trim() ?: ""
+                    if (text.isBlank()) return@withContext SttResult(false, error = "No Voice Input")
+                    SttResult(true, text = text)
+                }
+            }
         } catch (e: Exception) {
             return SttResult(false, error = "STT failed: ${e.localizedMessage ?: "Unknown"}")
         }
@@ -115,7 +122,8 @@ class ApiService(private val settings: SettingsDataStore) {
         }
 
         return withContext(Dispatchers.IO) {
-            val cl = StreamingAsrClient(ak, rid, ep)
+            val model = settings.sttModel.first().ifBlank { "bigmodel" }
+            val cl = StreamingAsrClient(ak, rid, ep, model)
             val result = cl.transcribe(audioProvider, onDebug)
             if (result.success) SttResult(true, text = result.text)
             else SttResult(false, error = result.error)
@@ -153,9 +161,14 @@ class ApiService(private val settings: SettingsDataStore) {
                 .url(ep).header("Authorization", "Bearer $ak")
                 .header("Content-Type", "application/json")
                 .post(rb.toString().toRequestBody(jsonMt)).build()
-            val rp = withContext(Dispatchers.IO) { client.newCall(rq).execute() }
-            val bd = rp.body?.string() ?: ""
-            if (!rp.isSuccessful) return LlmResult(false, error = "LLM (${rp.code}): ${bd.take(200)}")
+            val bd = withContext(Dispatchers.IO) {
+                client.newCall(rq).execute().use { rp ->
+                    val body = rp.body?.string() ?: ""
+                    if (!rp.isSuccessful) return@withContext "__HTTP_ERROR__${rp.code}: ${body.take(200)}"
+                    body
+                }
+            }
+            if (bd.startsWith("__HTTP_ERROR__")) return LlmResult(false, error = "LLM (${bd.removePrefix("__HTTP_ERROR__")})")
 
             val content = JSONObject(bd)
                 .optJSONArray("choices")?.optJSONObject(0)
@@ -182,7 +195,7 @@ class ApiService(private val settings: SettingsDataStore) {
                         else -> "NONE"
                     }
                 }
-                var dueDate = parseDateString(dateStr)
+                var dueDate = parseChineseDate(dateStr)
                 // Apply time if provided
                 if (!timeStr.equals("none", true) && timeStr.isNotBlank()) {
                     val parts = timeStr.split(":")
@@ -251,78 +264,5 @@ class ApiService(private val settings: SettingsDataStore) {
         } catch (e: Exception) {
             return LlmResult(false, error = "LLM failed: ${e.localizedMessage ?: "Unknown"}")
         }
-    }
-
-    private fun parseDateString(dateStr: String): Long? {
-        val s = dateStr.trim()
-        if (s.equals("none", true) || s.isEmpty() ||
-            s.equals("无", true) || s.equals("没有", true)) return null
-
-        val cal = Calendar.getInstance()
-        val now = Calendar.getInstance()
-
-        val dayMap = mapOf(
-            "一" to Calendar.MONDAY, "二" to Calendar.TUESDAY,
-            "三" to Calendar.WEDNESDAY, "四" to Calendar.THURSDAY,
-            "五" to Calendar.FRIDAY, "六" to Calendar.SATURDAY,
-            "日" to Calendar.SUNDAY, "天" to Calendar.SUNDAY
-        )
-
-        when {
-            s == "今天" || s == "今日" -> { }
-            s == "明天" || s == "明日" -> cal.add(Calendar.DAY_OF_YEAR, 1)
-            s == "后天" || s == "后日" -> cal.add(Calendar.DAY_OF_YEAR, 2)
-            s == "大后天" -> cal.add(Calendar.DAY_OF_YEAR, 3)
-
-            // 周五 / 星期X / 这周五 → this week's day
-            s.matches(Regex("(周|星期|这周|这个星期)[一二三四五六日天]")) ||
-            s.matches(Regex("[一二三四五六日天]")) -> {
-                val dayChar = Regex("[一二三四五六日天]").find(s)?.value ?: return null
-                val targetDay = dayMap[dayChar] ?: return null
-                val currentDay = cal.get(Calendar.DAY_OF_WEEK)
-                var diff = targetDay - currentDay
-                // If today is the target day, assume next week (only if it's a plain day name like "周三" and it's already that day)
-                if (diff < 0 || (diff == 0 && !s.startsWith("这"))) diff += 7
-                cal.add(Calendar.DAY_OF_YEAR, diff)
-            }
-
-            // 下周X
-            s.matches(Regex("下周[一二三四五六日天]")) -> {
-                val dayChar = s.last().toString()
-                val targetDay = dayMap[dayChar] ?: return null
-                // Go to next week's target day
-                var diff = targetDay - cal.get(Calendar.DAY_OF_WEEK)
-                if (diff <= 0) diff += 7
-                diff += 7  // next week
-                cal.add(Calendar.DAY_OF_YEAR, diff)
-            }
-
-            // X月X号/日
-            s.matches(Regex("[0-9]+月[0-9]+[号日]")) -> {
-                val parts = Regex("([0-9]+)月([0-9]+)[号日]").find(s)
-                if (parts != null) {
-                    cal.set(Calendar.MONTH, parts.groupValues[1].toInt() - 1)
-                    cal.set(Calendar.DAY_OF_MONTH, parts.groupValues[2].toInt())
-                    if (cal.before(now)) cal.add(Calendar.YEAR, 1)
-                }
-            }
-
-            // 下个月X号
-            s.startsWith("下个月") -> {
-                cal.add(Calendar.MONTH, 1)
-                val dayMatch = Regex("([0-9]+)[号日]").find(s)
-                if (dayMatch != null) {
-                    cal.set(Calendar.DAY_OF_MONTH, dayMatch.groupValues[1].toInt())
-                }
-            }
-
-            else -> return null
-        }
-
-        cal.set(Calendar.HOUR_OF_DAY, 23)
-        cal.set(Calendar.MINUTE, 59)
-        cal.set(Calendar.SECOND, 59)
-        cal.set(Calendar.MILLISECOND, 0)
-        return cal.timeInMillis
     }
 }

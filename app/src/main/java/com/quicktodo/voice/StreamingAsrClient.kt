@@ -18,7 +18,8 @@ data class StreamingAsrResult(
 class StreamingAsrClient(
     private val apiKey: String,
     private val resourceId: String,
-    private val endpoint: String
+    private val endpoint: String,
+    private val modelName: String = "bigmodel"
 ) {
     private val client = OkHttpClient.Builder()
         .readTimeout(0, TimeUnit.MILLISECONDS)
@@ -88,7 +89,7 @@ class StreamingAsrClient(
                         put("channel", 1)
                     })
                     put("request", JSONObject().apply {
-                        put("model_name", "bigmodel")
+                        put("model_name", modelName)
                         put("enable_punc", true)
                         put("enable_itn", true)
                     })
@@ -117,7 +118,6 @@ class StreamingAsrClient(
             override fun onMessage(ws: WebSocket, bytes: ByteString) {
                 if (bytes.size < 4) return
                 val raw = bytes.toByteArray()
-                val flags = raw[1].toInt() and 0x0F
                 val messageType = (raw[1].toInt() shr 4) and 0x0F
 
                 when (messageType) {
