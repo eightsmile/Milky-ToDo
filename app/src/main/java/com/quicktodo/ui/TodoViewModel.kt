@@ -81,4 +81,11 @@ class TodoViewModel(application: Application) : AndroidViewModel(application) {
             refreshWidget()
         }
     }
+
+    fun updateTodoOrder(ids: List<Long>) {
+        viewModelScope.launch {
+            repository.updateOrder(ids)
+            refreshWidget()
+        }
+    }
 }

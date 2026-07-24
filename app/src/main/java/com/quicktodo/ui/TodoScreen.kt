@@ -4,6 +4,7 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -13,16 +14,24 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.FileCopy
 import androidx.compose.material.icons.filled.Loop
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.outlined.Inventory2
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.widget.Toast
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
@@ -48,6 +57,7 @@ fun TodoScreen(
     onDelete: (TodoEntity) -> Unit,
     onUpdateTodo: (Long, String, Long?, String) -> Unit,
     onArchiveCompleted: () -> Unit,
+    onMoveTodo: (List<Long>) -> Unit,
     onOpenVoice: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenArchive: () -> Unit
@@ -63,6 +73,32 @@ fun TodoScreen(
     val scope = rememberCoroutineScope()
     val dateFormat = remember { SimpleDateFormat("MMM dd, yyyy", Locale.getDefault()) }
     val timeFormat = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
+    val context = LocalContext.current
+    val density = LocalDensity.current
+    val dragThresholdPx = with(density) { 72.dp.toPx() }
+    var displayTodos by remember { mutableStateOf(todos) }
+    var draggedTodoId by remember { mutableStateOf<Long?>(null) }
+    var dragOffsetY by remember { mutableStateOf(0f) }
+
+    LaunchedEffect(todos.map { it.id to it.sortOrder }) {
+        if (draggedTodoId == null) displayTodos = todos
+    }
+
+    fun moveDisplayedTodo(fromIndex: Int, toIndex: Int) {
+        if (fromIndex !in displayTodos.indices || toIndex !in displayTodos.indices || fromIndex == toIndex) return
+        val mutable = displayTodos.toMutableList()
+        val moved = mutable.removeAt(fromIndex)
+        mutable.add(toIndex, moved)
+        displayTodos = mutable
+        onMoveTodo(mutable.map { it.id })
+    }
+
+    fun copyTodosAsMarkdown() {
+        val markdown = formatTodosAsMarkdown(todos)
+        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        clipboard.setPrimaryClip(ClipData.newPlainText("Milky ToDo", markdown))
+        Toast.makeText(context, "Copied ${todos.size} todos as Markdown", Toast.LENGTH_SHORT).show()
+    }
 
     Scaffold(
         topBar = {
@@ -112,7 +148,7 @@ fun TodoScreen(
             LazyColumn(
                 modifier = Modifier.weight(1f)
             ) {
-                items(todos, key = { it.id }) { todo ->
+                items(displayTodos, key = { it.id }) { todo ->
                     SwipeToDismissBox(
                         state = rememberSwipeToDismissBoxState(
                             confirmValueChange = { value ->
@@ -156,7 +192,38 @@ fun TodoScreen(
                                     }
                                     editingTodoId = null
                                 },
-                                onCancelEdit = { editingTodoId = null }
+                                onCancelEdit = { editingTodoId = null },
+                                dragHandleModifier = Modifier.pointerInput(todo.id, displayTodos) {
+                                    detectDragGesturesAfterLongPress(
+                                        onDragStart = {
+                                            draggedTodoId = todo.id
+                                            dragOffsetY = 0f
+                                        },
+                                        onDrag = { change, dragAmount ->
+                                            change.consume()
+                                            dragOffsetY += dragAmount.y
+                                            val currentIndex = displayTodos.indexOfFirst { it.id == todo.id }
+                                            when {
+                                                dragOffsetY > dragThresholdPx -> {
+                                                    moveDisplayedTodo(currentIndex, currentIndex + 1)
+                                                    dragOffsetY = 0f
+                                                }
+                                                dragOffsetY < -dragThresholdPx -> {
+                                                    moveDisplayedTodo(currentIndex, currentIndex - 1)
+                                                    dragOffsetY = 0f
+                                                }
+                                            }
+                                        },
+                                        onDragEnd = {
+                                            draggedTodoId = null
+                                            dragOffsetY = 0f
+                                        },
+                                        onDragCancel = {
+                                            draggedTodoId = null
+                                            dragOffsetY = 0f
+                                        }
+                                    )
+                                }
                             )
                         },
                         enableDismissFromStartToEnd = false,
@@ -164,7 +231,7 @@ fun TodoScreen(
                     )
                 }
                 // ===== Empty state with icon =====
-                if (todos.isEmpty()) {
+                if (displayTodos.isEmpty()) {
                 item {
                     Box(
                         modifier = Modifier
@@ -199,16 +266,31 @@ fun TodoScreen(
             }
             }
 
-            // ===== Voice + Clear Completed on same row =====
+            // ===== Output + Clear Completed + Voice row =====
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Clear Completed on the left
+                ExtendedFloatingActionButton(
+                    onClick = { copyTodosAsMarkdown() },
+                    containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                    shape = RoundedCornerShape(24.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.FileCopy,
+                        contentDescription = "Output todos",
+                        modifier = Modifier.size(22.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Output")
+                }
+
                 val hasCompleted = todos.any { it.isDone }
                 if (hasCompleted) {
+                    Spacer(modifier = Modifier.width(8.dp))
                     TextButton(onClick = onArchiveCompleted) {
                         Text("Clear Completed", color = MaterialTheme.colorScheme.primary)
                     }
@@ -216,7 +298,6 @@ fun TodoScreen(
 
                 Spacer(modifier = Modifier.weight(1f))
 
-                // Voice button on the right
                 ExtendedFloatingActionButton(
                     onClick = onOpenVoice,
                     containerColor = MaterialTheme.colorScheme.primary,
@@ -445,7 +526,8 @@ fun TodoItem(
     onEdit: () -> Unit,
     onEditTextChange: (String) -> Unit = {},
     onSaveEdit: (title: String, dueDate: Long?, repeat: String) -> Unit = { _, _, _ -> },
-    onCancelEdit: () -> Unit = {}
+    onCancelEdit: () -> Unit = {},
+    dragHandleModifier: Modifier = Modifier
 ) {
     val dateFormat = remember { SimpleDateFormat("MMM dd", Locale.getDefault()) }
     val timeFormat = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
@@ -687,6 +769,47 @@ fun TodoItem(
                     }
                 }
             }
+        }
+
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(
+            text = "⋮⋮",
+            fontSize = 20.sp,
+            color = TextSecondary.copy(alpha = 0.7f),
+            modifier = dragHandleModifier
+                .padding(horizontal = 4.dp, vertical = 8.dp)
+        )
+    }
+}
+
+private fun formatTodosAsMarkdown(todos: List<TodoEntity>): String {
+    val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+    val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
+    return buildString {
+        appendLine("# Milky ToDo")
+        appendLine()
+        if (todos.isEmpty()) {
+            appendLine("_No todo items._")
+            return@buildString
+        }
+        todos.forEach { todo ->
+            append(if (todo.isDone) "- [x] " else "- [ ] ")
+            append(todo.title)
+            if (todo.dueDate != null) {
+                val cal = Calendar.getInstance().apply { timeInMillis = todo.dueDate }
+                val hasCustomTime = cal.get(Calendar.HOUR_OF_DAY) != 23 || cal.get(Calendar.MINUTE) != 59
+                append(" 📅 ")
+                append(dateFormat.format(Date(todo.dueDate)))
+                if (hasCustomTime) {
+                    append(" ")
+                    append(timeFormat.format(Date(todo.dueDate)))
+                }
+            }
+            if (todo.repeatInterval != "NONE") {
+                append(" 🔁 ")
+                append(todo.repeatInterval.lowercase(Locale.getDefault()))
+            }
+            appendLine()
         }
     }
 }

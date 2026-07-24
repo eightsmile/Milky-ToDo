@@ -49,6 +49,7 @@ class MainActivity : ComponentActivity() {
                         onDelete = { viewModel.deleteTodo(it) },
                         onUpdateTodo = { id, title, dueDate, repeat -> viewModel.updateTodo(id, title, dueDate, repeat) },
                         onArchiveCompleted = { viewModel.archiveCompleted() },
+                        onMoveTodo = { ids -> viewModel.updateTodoOrder(ids) },
                         onOpenVoice = { currentScreen = Screen.VOICE_INPUT },
                         onOpenSettings = { currentScreen = Screen.SETTINGS },
                         onOpenArchive = { currentScreen = Screen.ARCHIVE },

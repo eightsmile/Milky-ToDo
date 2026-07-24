@@ -58,6 +58,15 @@ class TodoRepositoryTest {
             rows.entries.removeIf { it.value.isArchived }
             flow.value = rows.values.toList()
         }
+
+        override suspend fun getMaxSortOrder(): Long {
+            return rows.values.maxOfOrNull { it.sortOrder } ?: 0L
+        }
+
+        override suspend fun updateSortOrder(id: Long, sortOrder: Long) {
+            rows[id]?.let { rows[id] = it.copy(sortOrder = sortOrder) }
+            flow.value = rows.values.sortedWith(compareBy<TodoEntity> { it.sortOrder }.thenBy { it.createdAt })
+        }
     }
 
     private fun date(year: Int, month: Int, day: Int): Long {
@@ -89,6 +98,21 @@ class TodoRepositoryTest {
         assertEquals("weekly report", rows[1].title)
         assertEquals("WEEKLY", rows[1].repeatInterval)
         assertEquals(date(2026, 7, 22), rows[1].dueDate)
+    }
+
+    @Test
+    fun updateOrderPersistsManualOrdering() = runTest {
+        val dao = FakeTodoDao()
+        val repo = TodoRepository(dao)
+        val first = repo.add("first")
+        val second = repo.add("second")
+        val third = repo.add("third")
+
+        repo.updateOrder(listOf(third, first, second))
+
+        assertEquals(0L, dao.getTodoById(third)!!.sortOrder)
+        assertEquals(1L, dao.getTodoById(first)!!.sortOrder)
+        assertEquals(2L, dao.getTodoById(second)!!.sortOrder)
     }
 
     @Test

@@ -15,11 +15,13 @@ class TodoRepository(private val todoDao: TodoDao) {
         } else {
             dueDate
         }
+        val nextOrder = todoDao.getMaxSortOrder() + 1
         return todoDao.insert(
             TodoEntity(
                 title = title.trim(),
                 dueDate = effectiveDueDate,
-                repeatInterval = repeatInterval
+                repeatInterval = repeatInterval,
+                sortOrder = nextOrder
             )
         )
     }
@@ -38,7 +40,8 @@ class TodoRepository(private val todoDao: TodoDao) {
                     TodoEntity(
                         title = todo.title,
                         dueDate = nextDueDate,
-                        repeatInterval = todo.repeatInterval
+                        repeatInterval = todo.repeatInterval,
+                        sortOrder = todoDao.getMaxSortOrder() + 1
                     )
                 )
             }
@@ -71,6 +74,12 @@ class TodoRepository(private val todoDao: TodoDao) {
                 repeatInterval = repeatInterval
             )
         )
+    }
+
+    suspend fun updateOrder(ids: List<Long>) {
+        ids.forEachIndexed { index, id ->
+            todoDao.updateSortOrder(id, index.toLong())
+        }
     }
 
     private fun calculateNextDueDate(currentDueDate: Long, interval: String): Long {
