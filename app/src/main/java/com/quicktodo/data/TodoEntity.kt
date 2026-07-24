@@ -7,6 +7,7 @@ import androidx.room.PrimaryKey
 @Entity(
     tableName = "todos",
     indices = [
+        Index(value = ["isArchived", "manualOrder", "createdAt"]),
         Index(value = ["isArchived", "sortOrder", "createdAt"]),
         Index(value = ["isArchived", "dueDate", "createdAt"]),
         Index(value = ["isArchived", "completedAt"]),
@@ -23,5 +24,6 @@ data class TodoEntity(
     val completedAt: Long? = null,
     val dueDate: Long? = null,
     val repeatInterval: String = "NONE", // NONE, DAILY, WEEKLY, MONTHLY
-    val sortOrder: Long = createdAt
+    val sortOrder: Long = createdAt,
+    val manualOrder: Long? = null
 )

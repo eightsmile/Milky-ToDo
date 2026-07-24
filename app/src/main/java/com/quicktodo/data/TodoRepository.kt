@@ -21,7 +21,8 @@ class TodoRepository(private val todoDao: TodoDao) {
                 title = title.trim(),
                 dueDate = effectiveDueDate,
                 repeatInterval = repeatInterval,
-                sortOrder = nextOrder
+                sortOrder = nextOrder,
+                manualOrder = null
             )
         )
     }
@@ -41,7 +42,8 @@ class TodoRepository(private val todoDao: TodoDao) {
                         title = todo.title,
                         dueDate = nextDueDate,
                         repeatInterval = todo.repeatInterval,
-                        sortOrder = todoDao.getMaxSortOrder() + 1
+                        sortOrder = todoDao.getMaxSortOrder() + 1,
+                        manualOrder = null
                     )
                 )
             }
@@ -78,7 +80,7 @@ class TodoRepository(private val todoDao: TodoDao) {
 
     suspend fun updateOrder(ids: List<Long>) {
         ids.forEachIndexed { index, id ->
-            todoDao.updateSortOrder(id, index.toLong())
+            todoDao.updateManualOrder(id, index.toLong())
         }
     }
 

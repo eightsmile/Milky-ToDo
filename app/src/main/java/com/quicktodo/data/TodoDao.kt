@@ -11,7 +11,7 @@ import kotlinx.coroutines.flow.Flow
 @Dao
 interface TodoDao {
 
-    @Query("SELECT * FROM todos WHERE isArchived = 0 ORDER BY sortOrder ASC, createdAt ASC")
+    @Query("SELECT * FROM todos WHERE isArchived = 0 ORDER BY CASE WHEN manualOrder IS NULL THEN 1 ELSE 0 END, manualOrder ASC, CASE WHEN dueDate IS NULL THEN 1 ELSE 0 END, dueDate ASC, createdAt ASC")
     fun getAllActive(): Flow<List<TodoEntity>>
 
     @Query("SELECT * FROM todos WHERE isArchived = 1 ORDER BY completedAt DESC")
@@ -43,4 +43,7 @@ interface TodoDao {
 
     @Query("UPDATE todos SET sortOrder = :sortOrder WHERE id = :id")
     suspend fun updateSortOrder(id: Long, sortOrder: Long)
+
+    @Query("UPDATE todos SET manualOrder = :manualOrder WHERE id = :id")
+    suspend fun updateManualOrder(id: Long, manualOrder: Long?)
 }

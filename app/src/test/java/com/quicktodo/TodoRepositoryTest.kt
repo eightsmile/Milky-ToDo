@@ -67,6 +67,11 @@ class TodoRepositoryTest {
             rows[id]?.let { rows[id] = it.copy(sortOrder = sortOrder) }
             flow.value = rows.values.sortedWith(compareBy<TodoEntity> { it.sortOrder }.thenBy { it.createdAt })
         }
+
+        override suspend fun updateManualOrder(id: Long, manualOrder: Long?) {
+            rows[id]?.let { rows[id] = it.copy(manualOrder = manualOrder) }
+            flow.value = rows.values.sortedWith(compareBy<TodoEntity> { it.manualOrder == null }.thenBy { it.manualOrder ?: Long.MAX_VALUE }.thenBy { it.dueDate ?: Long.MAX_VALUE }.thenBy { it.createdAt })
+        }
     }
 
     private fun date(year: Int, month: Int, day: Int): Long {
@@ -110,9 +115,9 @@ class TodoRepositoryTest {
 
         repo.updateOrder(listOf(third, first, second))
 
-        assertEquals(0L, dao.getTodoById(third)!!.sortOrder)
-        assertEquals(1L, dao.getTodoById(first)!!.sortOrder)
-        assertEquals(2L, dao.getTodoById(second)!!.sortOrder)
+        assertEquals(0L, dao.getTodoById(third)!!.manualOrder)
+        assertEquals(1L, dao.getTodoById(first)!!.manualOrder)
+        assertEquals(2L, dao.getTodoById(second)!!.manualOrder)
     }
 
     @Test

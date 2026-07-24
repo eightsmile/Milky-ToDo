@@ -4,7 +4,6 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -14,7 +13,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.FileCopy
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Loop
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.outlined.Inventory2
@@ -29,9 +30,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
@@ -74,14 +73,10 @@ fun TodoScreen(
     val dateFormat = remember { SimpleDateFormat("MMM dd, yyyy", Locale.getDefault()) }
     val timeFormat = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
     val context = LocalContext.current
-    val density = LocalDensity.current
-    val dragThresholdPx = with(density) { 72.dp.toPx() }
     var displayTodos by remember { mutableStateOf(todos) }
-    var draggedTodoId by remember { mutableStateOf<Long?>(null) }
-    var dragOffsetY by remember { mutableStateOf(0f) }
 
-    LaunchedEffect(todos.map { it.id to it.sortOrder }) {
-        if (draggedTodoId == null) displayTodos = todos
+    LaunchedEffect(todos.map { it.id to it.manualOrder to it.dueDate to it.createdAt }) {
+        displayTodos = todos
     }
 
     fun moveDisplayedTodo(fromIndex: Int, toIndex: Int) {
@@ -90,7 +85,9 @@ fun TodoScreen(
         val moved = mutable.removeAt(fromIndex)
         mutable.add(toIndex, moved)
         displayTodos = mutable
-        onMoveTodo(mutable.map { it.id })
+        val touchedIds = setOf(displayTodos[toIndex].id, displayTodos[fromIndex].id)
+        val manualIds = mutable.filter { it.manualOrder != null || it.id in touchedIds }.map { it.id }
+        onMoveTodo(manualIds)
     }
 
     fun copyTodosAsMarkdown() {
@@ -150,6 +147,7 @@ fun TodoScreen(
             ) {
                 items(displayTodos, key = { it.id }) { todo ->
                     SwipeToDismissBox(
+                        modifier = Modifier.animateItemPlacement(),
                         state = rememberSwipeToDismissBoxState(
                             confirmValueChange = { value ->
                                 if (value == SwipeToDismissBoxValue.EndToStart) {
@@ -193,37 +191,16 @@ fun TodoScreen(
                                     editingTodoId = null
                                 },
                                 onCancelEdit = { editingTodoId = null },
-                                dragHandleModifier = Modifier.pointerInput(todo.id, displayTodos) {
-                                    detectDragGesturesAfterLongPress(
-                                        onDragStart = {
-                                            draggedTodoId = todo.id
-                                            dragOffsetY = 0f
-                                        },
-                                        onDrag = { change, dragAmount ->
-                                            change.consume()
-                                            dragOffsetY += dragAmount.y
-                                            val currentIndex = displayTodos.indexOfFirst { it.id == todo.id }
-                                            when {
-                                                dragOffsetY > dragThresholdPx -> {
-                                                    moveDisplayedTodo(currentIndex, currentIndex + 1)
-                                                    dragOffsetY = 0f
-                                                }
-                                                dragOffsetY < -dragThresholdPx -> {
-                                                    moveDisplayedTodo(currentIndex, currentIndex - 1)
-                                                    dragOffsetY = 0f
-                                                }
-                                            }
-                                        },
-                                        onDragEnd = {
-                                            draggedTodoId = null
-                                            dragOffsetY = 0f
-                                        },
-                                        onDragCancel = {
-                                            draggedTodoId = null
-                                            dragOffsetY = 0f
-                                        }
-                                    )
-                                }
+                                onMoveUp = {
+                                    val index = displayTodos.indexOfFirst { it.id == todo.id }
+                                    moveDisplayedTodo(index, index - 1)
+                                },
+                                onMoveDown = {
+                                    val index = displayTodos.indexOfFirst { it.id == todo.id }
+                                    moveDisplayedTodo(index, index + 1)
+                                },
+                                canMoveUp = displayTodos.indexOfFirst { it.id == todo.id } > 0,
+                                canMoveDown = displayTodos.indexOfFirst { it.id == todo.id }.let { it >= 0 && it < displayTodos.lastIndex }
                             )
                         },
                         enableDismissFromStartToEnd = false,
@@ -273,19 +250,19 @@ fun TodoScreen(
                     .padding(horizontal = 16.dp, vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                ExtendedFloatingActionButton(
+                FilledTonalButton(
                     onClick = { copyTodosAsMarkdown() },
-                    containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                    contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
-                    shape = RoundedCornerShape(24.dp)
+                    modifier = Modifier.height(40.dp),
+                    shape = RoundedCornerShape(20.dp),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
                 ) {
                     Icon(
-                        imageVector = Icons.Filled.FileCopy,
-                        contentDescription = "Output todos",
-                        modifier = Modifier.size(22.dp)
+                        imageVector = Icons.Filled.ContentCopy,
+                        contentDescription = "Copy todos",
+                        modifier = Modifier.size(18.dp)
                     )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Output")
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Copy", fontSize = 13.sp)
                 }
 
                 val hasCompleted = todos.any { it.isDone }
@@ -450,7 +427,7 @@ fun TodoScreen(
                                 },
                                 contentPadding = PaddingValues(0.dp)
                             ) {
-                                Text("Clear", fontSize = 11.sp)
+                                Text("Clear", fontSize = 10.sp)
                             }
                         }
                     }
@@ -527,7 +504,10 @@ fun TodoItem(
     onEditTextChange: (String) -> Unit = {},
     onSaveEdit: (title: String, dueDate: Long?, repeat: String) -> Unit = { _, _, _ -> },
     onCancelEdit: () -> Unit = {},
-    dragHandleModifier: Modifier = Modifier
+    onMoveUp: () -> Unit = {},
+    onMoveDown: () -> Unit = {},
+    canMoveUp: Boolean = false,
+    canMoveDown: Boolean = false
 ) {
     val dateFormat = remember { SimpleDateFormat("MMM dd", Locale.getDefault()) }
     val timeFormat = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
@@ -605,12 +585,12 @@ fun TodoItem(
 
                     // Date, repeat, time chips + Done button
                     Row(
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        horizontalArrangement = Arrangement.spacedBy(3.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.padding(top = 4.dp)
                     ) {
-                        // Repeat chip (left)
-                        AssistChip(
+                        // Compact repeat icon button (cycles NONE/DAILY/WEEKLY/MONTHLY)
+                        IconButton(
                             onClick = {
                                 editRepeat = when (editRepeat) {
                                     "NONE" -> "DAILY"
@@ -619,22 +599,19 @@ fun TodoItem(
                                     else -> "NONE"
                                 }
                             },
-                            label = {
-                                Text(
-                                    when (editRepeat) {
-                                        "DAILY" -> "Daily"
-                                        "WEEKLY" -> "Weekly"
-                                        "MONTHLY" -> "Monthly"
-                                        else -> "Repeat"
-                                    }, fontSize = 11.sp
-                                )
-                            },
-                            shape = RoundedCornerShape(6.dp)
-                        )
+                            modifier = Modifier.size(32.dp)
+                        ) {
+                            Icon(
+                                Icons.Filled.Loop,
+                                contentDescription = "Repeat",
+                                tint = if (editRepeat != "NONE") MaterialTheme.colorScheme.primary else TextSecondary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
                         // Date chip (center)
                         AssistChip(
                             onClick = { showDatePicker = true },
-                            label = { Text(editDueDate?.let { dateFormat.format(Date(it)) } ?: "Date", fontSize = 11.sp) },
+                            label = { Text(editDueDate?.let { dateFormat.format(Date(it)) } ?: "Date", fontSize = 10.sp) },
                             shape = RoundedCornerShape(6.dp)
                         )
                         // Time chip (right)
@@ -649,7 +626,7 @@ fun TodoItem(
                                     if (hasCustomTime && editDueDate != null)
                                         timeFormat.format(Date(editDueDate!!))
                                     else "Time",
-                                    fontSize = 11.sp,
+                                    fontSize = 10.sp,
                                     color = if (hasCustomTime) MaterialTheme.colorScheme.primary
                                             else MaterialTheme.colorScheme.onSurface
                                 )
@@ -659,8 +636,8 @@ fun TodoItem(
                         Spacer(modifier = Modifier.weight(1f))
                         TextButton(onClick = {
                             onSaveEdit(editText, editDueDate, editRepeat)
-                        }, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)) {
-                            Text("Done", fontSize = 12.sp)
+                        }, contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp)) {
+                            Text("Done", fontSize = 11.sp)
                         }
                     }
                 }
@@ -738,7 +715,7 @@ fun TodoItem(
                         if (todo.repeatInterval != "NONE") {
                             Text(
                                 text = "🔁",
-                                fontSize = 11.sp
+                                fontSize = 10.sp
                             )
                         }
                         if (todo.dueDate != null) {
@@ -750,7 +727,7 @@ fun TodoItem(
                                 text = if (hasCustomTime)
                                     "${dateFormat.format(Date(todo.dueDate!!))} ${timeFormat.format(Date(todo.dueDate!!))}"
                                 else dateFormat.format(Date(todo.dueDate!!)),
-                                fontSize = 11.sp,
+                                fontSize = 10.sp,
                                 color = if (isOverdue) Color(0xFFFF3B30) else TextSecondary
                             )
                         }
@@ -762,7 +739,7 @@ fun TodoItem(
                                     "MONTHLY" -> "monthly"
                                     else -> ""
                                 },
-                                fontSize = 11.sp,
+                                fontSize = 10.sp,
                                 color = TextSecondary
                             )
                         }
@@ -771,14 +748,37 @@ fun TodoItem(
             }
         }
 
-        Spacer(modifier = Modifier.width(8.dp))
-        Text(
-            text = "⋮⋮",
-            fontSize = 20.sp,
-            color = TextSecondary.copy(alpha = 0.7f),
-            modifier = dragHandleModifier
-                .padding(horizontal = 4.dp, vertical = 8.dp)
-        )
+        Spacer(modifier = Modifier.width(6.dp))
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+            modifier = Modifier.width(28.dp)
+        ) {
+            IconButton(
+                onClick = onMoveUp,
+                enabled = canMoveUp,
+                modifier = Modifier.size(26.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.KeyboardArrowUp,
+                    contentDescription = "Move up",
+                    tint = if (canMoveUp) TextSecondary else TextSecondary.copy(alpha = 0.25f),
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+            IconButton(
+                onClick = onMoveDown,
+                enabled = canMoveDown,
+                modifier = Modifier.size(26.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.KeyboardArrowDown,
+                    contentDescription = "Move down",
+                    tint = if (canMoveDown) TextSecondary else TextSecondary.copy(alpha = 0.25f),
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+        }
     }
 }
 
