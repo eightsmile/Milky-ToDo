@@ -118,6 +118,12 @@ fun TodoScreen(
                     }
                 },
                 actions = {
+                    IconButton(onClick = { copyTodosAsMarkdown() }) {
+                        Icon(
+                            imageVector = Icons.Filled.ContentCopy,
+                            contentDescription = "Copy todos"
+                        )
+                    }
                     IconButton(onClick = onOpenArchive) {
                         Icon(
                             imageVector = Icons.Outlined.Inventory2,
@@ -243,31 +249,15 @@ fun TodoScreen(
             }
             }
 
-            // ===== Output + Clear Completed + Voice row =====
+            // ===== Clear Completed + Voice row =====
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                FilledTonalButton(
-                    onClick = { copyTodosAsMarkdown() },
-                    modifier = Modifier.height(40.dp),
-                    shape = RoundedCornerShape(20.dp),
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.ContentCopy,
-                        contentDescription = "Copy todos",
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text("Copy", fontSize = 13.sp)
-                }
-
                 val hasCompleted = todos.any { it.isDone }
                 if (hasCompleted) {
-                    Spacer(modifier = Modifier.width(8.dp))
                     TextButton(onClick = onArchiveCompleted) {
                         Text("Clear Completed", color = MaterialTheme.colorScheme.primary)
                     }
