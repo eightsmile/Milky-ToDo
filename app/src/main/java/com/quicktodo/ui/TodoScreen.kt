@@ -582,8 +582,8 @@ fun TodoItem(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.padding(top = 4.dp)
                     ) {
-                        // Compact repeat icon button (cycles NONE/DAILY/WEEKLY/MONTHLY)
-                        IconButton(
+                        // Compact repeat button: icon for NONE, D/W/M for active repeat intervals.
+                        TextButton(
                             onClick = {
                                 editRepeat = when (editRepeat) {
                                     "NONE" -> "DAILY"
@@ -592,14 +592,29 @@ fun TodoItem(
                                     else -> "NONE"
                                 }
                             },
-                            modifier = Modifier.size(32.dp)
+                            modifier = Modifier.height(32.dp),
+                            contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)
                         ) {
                             Icon(
                                 Icons.Filled.Loop,
                                 contentDescription = "Repeat",
                                 tint = if (editRepeat != "NONE") MaterialTheme.colorScheme.primary else TextSecondary,
-                                modifier = Modifier.size(18.dp)
+                                modifier = Modifier.size(16.dp)
                             )
+                            if (editRepeat != "NONE") {
+                                Spacer(modifier = Modifier.width(2.dp))
+                                Text(
+                                    text = when (editRepeat) {
+                                        "DAILY" -> "D"
+                                        "WEEKLY" -> "W"
+                                        "MONTHLY" -> "M"
+                                        else -> ""
+                                    },
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
                         }
                         // Date chip (center)
                         AssistChip(
