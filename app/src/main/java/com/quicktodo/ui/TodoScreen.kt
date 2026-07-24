@@ -75,7 +75,10 @@ fun TodoScreen(
     val context = LocalContext.current
     var displayTodos by remember { mutableStateOf(todos) }
 
-    LaunchedEffect(todos.map { it.id to it.manualOrder to it.dueDate to it.createdAt }) {
+    // Keep the locally reordered display list in sync with every Room update.
+    // This must include isDone/completedAt changes; otherwise a successful toggle can
+    // keep rendering a stale unchecked TodoEntity until another sort-related field changes.
+    LaunchedEffect(todos) {
         displayTodos = todos
     }
 
